@@ -1,0 +1,3 @@
+[submodule "LeagueAPI"]
+	path = LeagueAPI
+	url = https://github.com/Maufeat/LeagueAPI
