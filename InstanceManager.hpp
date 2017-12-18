@@ -44,6 +44,7 @@ void InstanceManager::Start(WsServer &server, nlohmann::json request) {
 	for (auto &a_connection : server.get_connections())
 		a_connection->send(send_stream);
 
+	auto x = Utils::launchWithArgs("C:\\Riot Games\\League of Legends", "--allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
 	Add(std::make_shared<lol::LeagueClient>("127.0.0.1", port, password));
 };
 

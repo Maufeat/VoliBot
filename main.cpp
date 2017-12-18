@@ -2,7 +2,6 @@
 #include <lol/base_op.hpp>
 #include "InstanceManager.hpp"
 #include <SimpleWeb/server_ws.hpp>
-#include "LeagueAPI/tiny-process-library/process.hpp";
 
 using namespace std;
 using WsServer = SimpleWeb::SocketServer<SimpleWeb::WS>;

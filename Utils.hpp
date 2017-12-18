@@ -1,9 +1,32 @@
 #pragma once
 #include <string>
 #include <random>
+#include <fstream>
+#include <iostream>
 #include <asio.hpp>
+#include "LeagueAPI/tiny-process-library/process.hpp";
 
 namespace Utils {
+
+	std::string get_exe(std::string path) {
+		if (std::ifstream(path + "/LeagueClient.bat")) {
+			return "\\LeagueClient.bat";
+		}
+		else if (std::ifstream(path + "/LeagueClient.exe")) {
+			return "\\LeagueClient.exe";
+		}
+		else if (std::ifstream(path + "/LeagueClient.app")) {
+			return "\\LeagueClient.app";
+		}
+		return "";
+	};
+
+	long launchWithArgs(std::string path, std::string args)
+	{
+		TinyProcessLib::Process lcuProcess(path + get_exe(path) + " " + args);
+		auto exit_status = lcuProcess.get_exit_status();
+		return lcuProcess.get_id();
+	};
 
 	uint16_t freePort()
 	{
