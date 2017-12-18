@@ -104,6 +104,7 @@ void InstanceManager::Add(std::shared_ptr<lol::LeagueClient> client) {
     }
   };
   client->wss.io_service = mService;
+  client->httpsa.io_service = mService;
   client->wss.start();
 };
 

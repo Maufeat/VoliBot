@@ -1,6 +1,7 @@
 #include <iostream>
 #include "InstanceManager.hpp"
 #include "VoliServer.hpp"
+#include <lol/op/AsyncStatus.hpp>
 
 using namespace std;
 using namespace voli;
