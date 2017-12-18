@@ -30,16 +30,17 @@ int main()
 				res["List"].emplace_back(nlohmann::json::array({ { { "Id", client.first } } }));
 			}
 			*send_stream << res.dump();
+			for (auto &a_connection : server.get_connections())
+				a_connection->send(send_stream);
 		}
 		else if (requestName == "RequestInstanceStart") {
-			thread client([&im]() {
+			thread client([&im, &server, &j]() {
 				// TODO: Add Username, Password and Region here and in Web Interface
-				im.Start(49821, "55j584nSsfxGZsStdNsp_g");
+				//im.Start(49821, "55j584nSsfxGZsStdNsp_g");
+				im.Start(server, j);
 			});
 			client.detach();
 		}
-		for (auto &a_connection : server.get_connections())
-			a_connection->send(send_stream);
 	};
 
 	im.onwelcome = [&server](int id, auto ci) {
@@ -57,6 +58,6 @@ int main()
 	});
 
 	server_thread.join();
-	    
+	
     cin.get();
 }
