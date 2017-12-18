@@ -16,5 +16,10 @@ namespace voli {
     VoliServer(IoServicePtr service, int port);
     void broadcast(const std::string& name, const nlohmann::json& data);
     void addHandler(const std::string& name, std::function<json(const json&)> fun);
+
+    template<typename T>
+    void broadcast(const T& data) {
+      broadcast(T::NAME, data);
+    }
   };
 }
