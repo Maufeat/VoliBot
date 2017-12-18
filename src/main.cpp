@@ -14,6 +14,7 @@ static void to_json(json& j, const ExampleEvent& v) {
   j["message"] = v.message;
 }
 
+
 int main()
 {
   auto service = make_shared<IoService>();

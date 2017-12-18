@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include "InstanceManager.hpp"
+
 using namespace voli;
 
 namespace {
@@ -67,31 +68,54 @@ void InstanceManager::Start() {
 
 
 void InstanceManager::Add(std::shared_ptr<lol::LeagueClient> client) {
-  int curId = ++nextId;
-  client->wss.on_error = [&client](auto c, const SimpleWeb::error_code &e) {
-    if (e.value() == 10061)
-    {
-      std::cout << "Waiting for LeagueClient to be started." << std::endl;
-      client->wss.start();
-    }
-    else
-      std::cout << "Client: Error: " + std::to_string(e.value()) + " | error message: " + e.message() << std::endl;
-  };
-  client->onevent = [this, &curId](auto ci, auto message) {
-    onevent(curId, ci, message);
-  };
-  client->onwelcome = [this, &curId](auto ci) {
-    onwelcome(curId, ci);
-  };
+  uint32_t curId = client->id = ++nextId;
+  std::weak_ptr<lol::LeagueClient> ptr = client;
   mClients[curId] = client;
+  client->wss.on_error = [ptr](auto c, const SimpleWeb::error_code &e) {
+    if (auto spt = ptr.lock()) {
+      if (e.value() == 10061)
+      {
+        std::cout << "Waiting for LeagueClient to be started." << std::endl;
+        spt->wss.start();
+      }
+      else
+        std::cout << "Client: Error: " + std::to_string(e.value()) + " | error message: " + e.message() << std::endl;
+    }
+  };
+  client->wss.on_message = [this, ptr](std::shared_ptr<lol::WssClient::Connection> connection,
+      std::shared_ptr<lol::WssClient::Message> message) {
+    if(auto spt = ptr.lock()) {
+      if (message->size() > 0) {
+        auto j = json::parse(message->string()).get<std::vector<json>>();
+        if (j[0].get<int32_t>() == 0) {
+          auto send_stream = std::make_shared <lol::WssClient::SendStream >();
+          *send_stream << "[5, \"OnJsonApiEvent\"]";
+          connection->send(send_stream);
+          if (onwelcome)
+            onwelcome(*spt);
+        }
+        else if (j[0].get<int32_t>() == 8 && j[1].get<std::string>() == "OnJsonApiEvent") {
+          auto pevent = j[2].get<lol::PluginResourceEvent>();
+          for (const auto& p : onevent)
+            if (std::smatch match; std::regex_match(pevent.uri, match, std::regex(p.first)))
+              p.second(*spt, match, pevent.eventType, pevent.data);
+        }
+      }
+    }
+  };
   client->wss.io_service = mService;
   client->wss.start();
 };
 
-std::map<int, std::shared_ptr<lol::LeagueClient>> InstanceManager::GetAll() {
+const std::unordered_map<uint32_t, std::shared_ptr<lol::LeagueClient>>& InstanceManager::GetAll() const {
   return mClients;
 };
 
-std::shared_ptr<lol::LeagueClient> InstanceManager::Get(int id) {
-  return mClients[id];
+std::shared_ptr<lol::LeagueClient> InstanceManager::Get(uint32_t id) const {
+  auto it = mClients.find(id);
+  return it == mClients.end() ? nullptr : it->second;
 };
+
+void InstanceManager::remove(uint32_t id) {
+  mClients.erase(id);
+}
