@@ -10,38 +10,53 @@ using WssClient = SimpleWeb::SocketClient<SimpleWeb::WSS>;
 
 int main()
 {
-	map<int, std::shared_ptr<lol::LeagueClient>> clients;
 
 	WsServer server;
+	InstanceManager im;
 	server.config.port = 20000;
-	auto &wserver = server.endpoint["^/volibot/?$"];
-	wserver.on_message = [&server](shared_ptr<WsServer::Connection> connection, shared_ptr<WsServer::Message> message) {
-		auto j = nlohmann::json::parse(message->string()).get<nlohmann::json>();
-		string requestName = j["RequestName"].get<std::string>();
 
-		cout << requestName << endl;
+	map<int, std::shared_ptr<lol::LeagueClient>> clients;
+
+	auto &wserver = server.endpoint["^/volibot/?$"];
+	wserver.on_message = [&server, &im](shared_ptr<WsServer::Connection> connection, shared_ptr<WsServer::Message> message) {
+		auto j = nlohmann::json::parse(message->string()).get<nlohmann::json>();
+		auto send_stream = make_shared<WsServer::SendStream>();
+		string requestName = j["RequestName"].get<std::string>();
+		if (requestName == "RequestInstanceList") {
+			nlohmann::json res;
+			res["EventName"] = "EventListInstance";
+			res["List"] = nlohmann::json::array({});
+			for (auto const &client : im.GetAll()){
+				res["List"].emplace_back(nlohmann::json::array({ { { "Id", client.first } } }));
+			}
+			*send_stream << res.dump();
+		}
+		else if (requestName == "RequestInstanceStart") {
+			thread client([&im]() {
+				// TODO: Add Username, Password and Region here and in Web Interface
+				im.Start(49821, "55j584nSsfxGZsStdNsp_g");
+			});
+			client.detach();
+		}
+		for (auto &a_connection : server.get_connections())
+			a_connection->send(send_stream);
 	};
+
+	im.onwelcome = [&server](int id, auto ci) {
+		std::cout << "OnWelcome from Id : " << id << std::endl;
+		//SEND SOMETHING TO WEBINTERFACE
+	};
+
+	im.onevent = [&server](int id, auto ci, auto x) {
+		std::cout << "OnEvent from Id : " << id << std::endl;
+		//SEND SOMETHING TO WEBINTERFACE
+	};
+
 	thread server_thread([&server]() {
 		server.start();
 	});
-	
-	clients[1] = make_shared<lol::LeagueClient>("127.0.0.1", 50647, "CU6F8Wed3kBX1kWR4Xqatw");
-	clients[1]->wss.on_error = [&clients](auto c, const SimpleWeb::error_code &e) {
-		if (e.value() == 10061)
-		{
-			cout << "Waiting for LeagueClient to be started." << endl;
-			//ci.wss.start();
-		}
-		else
-			cout << "Client: Error: " + to_string(e.value()) + " | error message: " + e.message() << endl;
-	};
-	clients[1]->onevent = [](auto ci, auto message) {
-        cout << "From url: " << message.uri << endl;
-    };
-	clients[1]->onwelcome = [](auto ci) {
-        cout  << "On welcome!" << endl;
-    };
-	clients[1]->wss.start();
-    
+
+	server_thread.join();
+	    
     cin.get();
 }
