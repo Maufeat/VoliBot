@@ -26,18 +26,19 @@ int main()
 	VoliServer server(service, 8000);
 	manager.Start();
 	manager.onwelcome = [](lol::LeagueClient &c) {
-		lol::LolLoginUsernameAndPassword creds;
-		creds.username = "";
-		creds.password = "";
-		auto result = lol::PostLolLoginV1Session(c, creds);
-		if (result) {
-
-		}
 	};
 	manager.onevent.emplace(".*", [](lol::LeagueClient& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
-		//voli::print("Test", m.str().c_str());
+    // auto uri = m.str();
+    // voli::print("Test", uri.c_str());
 	});
-	///lol-login/v1/session
+  manager.onevent.emplace("/plugin-manager/v1/status", [](lol::LeagueClient& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+    auto res = lol::PostLolLoginV1Session(c, { "b24241321", "moonshadow565" });
+    if (res)
+      cout << "OK:" << lol::to_string(*(res.data)) << '\n';
+    else
+      cout << "BAD: " << lol::to_string(*(res.error)) << '\n';
+  });
+	// /lol-login/v1/session
 	manager.onevent.emplace("/lol-login/v1/session", [](lol::LeagueClient& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
