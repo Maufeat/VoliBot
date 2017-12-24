@@ -27,8 +27,8 @@ int main()
 	manager.Start();
 	manager.onwelcome = [](lol::LeagueClient &c) {
 		lol::LolLoginUsernameAndPassword creds;
-		creds.username = "x";
-		creds.password = "x";
+		creds.username = "";
+		creds.password = "";
 		auto result = lol::PostLolLoginV1Session(c, creds);
 		if (result) {
 
