@@ -27,12 +27,12 @@ int main()
 	manager.Start();
 	manager.onwelcome = [](lol::LeagueClient &c) {
 		lol::LolLoginUsernameAndPassword creds;
-		creds.username = "";
-		creds.password = "";
-		auto x = std::thread([&c, creds]() {
-			std::optional<lol::LolLoginLoginSession> result = lol::PostLolLoginV1Session(c, creds).data;
-		});
-		x.detach();
+		creds.username = "x";
+		creds.password = "x";
+		auto result = lol::PostLolLoginV1Session(c, creds);
+		if (result) {
+
+		}
 	};
 	manager.onevent.emplace(".*", [](lol::LeagueClient& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		//voli::print("Test", m.str().c_str());
