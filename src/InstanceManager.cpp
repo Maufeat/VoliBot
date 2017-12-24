@@ -62,7 +62,7 @@ InstanceManager::InstanceManager(IoServicePtr service) : mService(service) {
 void InstanceManager::Start() {
   int port = freePort();
   std::string password = random_string(21);
-  auto x = launchWithArgs("C:\\Riot Games\\League of Legends", "--allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
+  auto x = launchWithArgs("D:\\Riot Games\\League of Legends", "--allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
   if (x != 0)
 	  Add(std::make_shared<lol::LeagueClient>("127.0.0.1", port, password));
   else
