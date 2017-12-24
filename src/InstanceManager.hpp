@@ -8,7 +8,7 @@
 namespace voli {
   class InstanceManager {
   public:
-    using HandlerFunc = std::function<void(lol::LeagueClient&, const std::smatch&, const lol::PluginResourceEventType&, const json&)>;
+    using HandlerFunc = std::function<void(lol::LeagueClient&, const std::smatch&, lol::PluginResourceEventType, const json&)>;
     using EventMap = std::unordered_multimap<std::string, HandlerFunc>;
   private:
     uint32_t nextId = 0;

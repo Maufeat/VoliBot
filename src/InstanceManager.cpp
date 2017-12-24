@@ -63,7 +63,10 @@ void InstanceManager::Start() {
   int port = freePort();
   std::string password = random_string(21);
   auto x = launchWithArgs("C:\\Riot Games\\League of Legends", "--allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
-  Add(std::make_shared<lol::LeagueClient>("127.0.0.1", port, password));
+  if (x != 0)
+	  Add(std::make_shared<lol::LeagueClient>("127.0.0.1", port, password));
+  else
+	  voli::printSystem("No League found. Please check your League of Legends Path in Settings.");
 };
 
 
@@ -104,7 +107,7 @@ void InstanceManager::Add(std::shared_ptr<lol::LeagueClient> client) {
     }
   };
   client->wss.io_service = mService;
-  client->httpsa.io_service = mService;
+  client->https.io_service = mService;
   client->wss.start();
 };
 
