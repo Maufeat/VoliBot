@@ -6,7 +6,7 @@
 
 using namespace voli;
 
-namespace {
+namespace voli {
   std::string get_exe(std::string path) {
     if (std::ifstream(path + "/LeagueClient.bat")) {
       return "\\LeagueClient.bat";
@@ -62,7 +62,7 @@ InstanceManager::InstanceManager(IoServicePtr service) : mService(service) {
 void InstanceManager::Start() {
   int port = freePort();
   std::string password = random_string(21);
-  auto x = launchWithArgs("X:/Games/Riot Games/League of Legends/", " --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
+  auto x = launchWithArgs("D:/Riot Games/League of Legends/", "--headless --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
   if (x != 0)
 	  Add(std::make_shared<lol::LeagueClient>("127.0.0.1", port, password));
   else

@@ -3,6 +3,7 @@
 #include <asio.hpp>
 #include <json.hpp>
 #include <memory>
+#include <random>
 
 
 #include <cstdlib>
@@ -84,6 +85,14 @@ namespace voli {
 	  strftime(buf, sizeof(buf), "%d.%m.%Y %X", &tstruct);
 
 	  return buf;
+  }
+
+  static int random_number(int size) {
+	  std::random_device rd;     // only used once to initialise (seed) engine
+	  std::mt19937 rng(rd());    // random-number engine used (Mersenne-Twister in this case)
+	  std::uniform_int_distribution<int> uni(0, size); // guaranteed unbiased
+
+	  return uni(rng);
   }
 
   static void print(std::string extra, std::string msg) {
