@@ -76,10 +76,24 @@ int main()
 			break;
 		case lol::PluginResourceEventType::Create_e:
 			lol::LolChampSelectChampSelectSession champSelectSession = data;
-			for (auto const& player : champSelectSession.myTeam) {
-				if (player.cellId == champSelectSession.localPlayerCellId) {
-					auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, player.summonerId, player.championId);
-					voli::print("Test", "We've got: " + championInfos.data->name);
+			if (champSelectSession.actions.size() == 0) {
+				for (auto const& player : champSelectSession.myTeam) {
+					if (player.cellId == champSelectSession.localPlayerCellId && player.championId > 0) {
+						auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, player.summonerId, player.championId);
+						voli::print("Test", "We've got: " + championInfos.data->name);
+					}
+				}
+			}
+			else {
+				for (auto const& action : champSelectSession.actions) {
+					for (auto const& aaction : action) {
+						if (aaction.at("actorCellId").get<uint32_t>() == champSelectSession.localPlayerCellId && aaction.at("completed").get<bool>() == false) {
+							if (aaction.at("type").get<std::string>() == "pick")
+								voli::print("Test", "We have to pick.");
+							else if (aaction.at("type").get<std::string>() == "ban")
+								voli::print("Test", "We have to ban.");
+						}
+					}
 				}
 			}
 			break;
