@@ -1,5 +1,6 @@
 #pragma once
 #include <SimpleWeb/server_ws.hpp>
+#include <lol/base_op.hpp>
 #include <asio.hpp>
 #include <json.hpp>
 #include <memory>
@@ -30,81 +31,112 @@
 #endif
 
 namespace voli {
-  using json = nlohmann::json;
-  using IoService = asio::io_service;
-  using IoServicePtr = std::shared_ptr<IoService>;
+	using json = nlohmann::json;
+	using IoService = asio::io_service;
+	using IoServicePtr = std::shared_ptr<IoService>;
 
 
-  static std::mutex m;
 
-  static void print_header() {
+	class LeagueInstance : public lol::LeagueClient {
+	public:
+		std::string lolUsername;
+		std::string lolPassword;
+		using lol::LeagueClient::LeagueClient;
+	};
 
-	  std::string line_1 = "Welcome to VoliBot";
-	  std::string line_2 = "Version: 1.0.0";
-	  std::string line_3 = "www.VoliBot.com";
 
-	  int columns;
+	static std::mutex m;
+
+	static void print_header() {
+
+		std::string line_1 = "Welcome to VoliBot";
+		std::string line_2 = "Version: 1.0.0";
+		std::string line_3 = "www.VoliBot.com";
+
+		int columns;
 
 #if defined(OS_LINUX) || defined(OS_MAC)
-	  struct winsize w;
-	  ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-	  columns = w.ws_col;
+		struct winsize w;
+		ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+		columns = w.ws_col;
 #elif defined(OS_WIN)
-	  CONSOLE_SCREEN_BUFFER_INFO csbi;
-	  GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-	  columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+		CONSOLE_SCREEN_BUFFER_INFO csbi;
+		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+		SetConsoleTitle("Hey");
+		columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 #endif
 
-	  std::cout << rang::fgB::cyan;
-	  for (int i = 0; i < columns; i++) {
-		  std::cout << "=";
-	  }
-	  std::cout << rang::fgB::yellow << std::endl;
+		std::cout << rang::fgB::cyan;
+		for (int i = 0; i < columns; i++) {
+			std::cout << "=";
+		}
+		std::cout << rang::fgB::yellow << std::endl;
 
-	  std::cout << std::setw(0) << std::setw((columns / 2) + line_1.size() / 2) << line_1.c_str() << std::endl;
-	  std::cout << rang::fg::white;
-	  std::cout << std::setw(0) << std::setw((columns / 2) + line_2.size() / 2) << line_2.c_str() << std::endl;
-	  std::cout << rang::fgB::white;
-	  std::cout << std::setw(0) << std::setw((columns / 2) + line_3.size() / 2) << line_3.c_str() << std::endl;
-	  std::cout << std::setw(0) << std::endl;
+		std::cout << std::setw(0) << std::setw((columns / 2) + line_1.size() / 2) << line_1.c_str() << std::endl;
+		std::cout << rang::fg::white;
+		std::cout << std::setw(0) << std::setw((columns / 2) + line_2.size() / 2) << line_2.c_str() << std::endl;
+		std::cout << rang::fgB::white;
+		std::cout << std::setw(0) << std::setw((columns / 2) + line_3.size() / 2) << line_3.c_str() << std::endl;
+		std::cout << std::setw(0) << std::endl;
 
-	  std::cout << rang::fgB::cyan;
-	  for (int i = 0; i < columns; i++) {
-		  std::cout << "=";
-	  }
-	  std::cout << rang::style::reset;
+		std::cout << rang::fgB::cyan;
+		for (int i = 0; i < columns; i++) {
+			std::cout << "=";
+		}
+		std::cout << rang::style::reset;
 
-  }
+	}
 
-  // Get current date/time, format is YYYY-MM-DD.HH:mm:ss
-  static const std::string currentDateTime() {
-	  time_t     now = time(0);
-	  struct tm  tstruct;
-	  char       buf[80];
-	  tstruct = *localtime(&now);
-	  strftime(buf, sizeof(buf), "%d.%m.%Y %X", &tstruct);
+	// Capitalize std::string
+	static std::string capitalize(std::string &s)
+	{
+		bool cap = true;
 
-	  return buf;
-  }
+		for (unsigned int i = 0; i <= s.length(); i++)
+		{
+			if (isalpha(s[i]) && cap == true)
+			{
+				s[i] = toupper(s[i]);
+				cap = false;
+			}
+			else if (isspace(s[i]))
+			{
+				cap = true;
+			}
+		}
 
-  static int random_number(int size) {
-	  std::random_device rd;     // only used once to initialise (seed) engine
-	  std::mt19937 rng(rd());    // random-number engine used (Mersenne-Twister in this case)
-	  std::uniform_int_distribution<int> uni(0, size); // guaranteed unbiased
+		return s;
+	}
 
-	  return uni(rng);
-  }
+	// Get current date/time, format is YYYY-MM-DD.HH:mm:ss
+	static const std::string currentDateTime() {
+		time_t     now = time(0);
+		struct tm  tstruct;
+		char       buf[80];
+		tstruct = *localtime(&now);
+		strftime(buf, sizeof(buf), "%d.%m.%Y %X", &tstruct);
 
-  static void print(std::string extra, std::string msg) {
-	  std::lock_guard<std::mutex> mylock(m);
-	  std::cout << rang::fgB::cyan << "[" + currentDateTime() + "] " << rang::fgB::yellow << "[" + extra + "] " << rang::fgB::white << msg << rang::style::reset << std::endl;
-  }
+		return buf;
+	}
 
-  static void printSystem(std::string msg) {
-	  std::cout << rang::fgB::cyan << "[" + currentDateTime() + "] " << rang::fgB::white << msg << rang::style::reset << std::endl;
-  }
+	static int random_number(int size) {
+		std::random_device rd;     // only used once to initialise (seed) engine
+		std::mt19937 rng(rd());    // random-number engine used (Mersenne-Twister in this case)
+		std::uniform_int_distribution<int> uni(0, size); // guaranteed unbiased
 
-  static void printError(std::string extra, std::string msg) {
-	  std::cout << rang::fgB::cyan << "[" + currentDateTime() + "] " << rang::fgB::yellow << "[" + extra + "] " << rang::fgB::red << msg << rang::style::reset << std::endl;
-  }
+		return uni(rng);
+	}
+
+	static void print(std::string extra, std::string msg) {
+		std::lock_guard<std::mutex> mylock(m);
+		std::cout << rang::fgB::cyan << "[" + currentDateTime() + "] " << rang::fgB::yellow << "[" + extra + "] " << rang::fgB::white << msg << rang::style::reset << std::endl;
+	}
+
+	static void printSystem(std::string msg) {
+		std::cout << rang::fgB::cyan << "[" + currentDateTime() + "] " << rang::fgB::white << msg << rang::style::reset << std::endl;
+	}
+
+	static void printError(std::string extra, std::string msg) {
+		std::cout << rang::fgB::cyan << "[" + currentDateTime() + "] " << rang::fgB::yellow << "[" + extra + "] " << rang::fgB::red << msg << rang::style::reset << std::endl;
+	}
 }

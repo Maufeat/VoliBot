@@ -62,17 +62,21 @@ InstanceManager::InstanceManager(IoServicePtr service) : mService(service) {
 void InstanceManager::Start() {
   int port = freePort();
   std::string password = random_string(21);
-  auto x = launchWithArgs("D:/Riot Games/League of Legends/", "--headless --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
-  if (x != 0)
-	  Add(std::make_shared<lol::LeagueClient>("127.0.0.1", port, password));
+  auto x = launchWithArgs("D:/Riot Games/League of Legends/", " --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
+  if (x != 0) {
+	  std::shared_ptr<voli::LeagueInstance> client = std::make_shared<voli::LeagueInstance>("127.0.0.1", port, password);
+	  client->lolUsername = "maufeatdev2";
+	  client->lolPassword = "gV4129bC";
+	  Add(client);
+  }
   else
 	  voli::printSystem("No League found. Please check your League of Legends Path in Settings.");
 };
 
 
-void InstanceManager::Add(std::shared_ptr<lol::LeagueClient> client) {
+void InstanceManager::Add(std::shared_ptr<voli::LeagueInstance> client) {
   uint32_t curId = client->id = ++nextId;
-  std::weak_ptr<lol::LeagueClient> ptr = client;
+  std::weak_ptr<voli::LeagueInstance> ptr = client;
   mClients[curId] = client;
   client->wss.on_error = [ptr](auto c, const SimpleWeb::error_code &e) {
     if (auto spt = ptr.lock()) {
@@ -111,11 +115,11 @@ void InstanceManager::Add(std::shared_ptr<lol::LeagueClient> client) {
   client->wss.start();
 };
 
-const std::unordered_map<uint32_t, std::shared_ptr<lol::LeagueClient>>& InstanceManager::GetAll() const {
+const std::unordered_map<uint32_t, std::shared_ptr<voli::LeagueInstance>>& InstanceManager::GetAll() const {
   return mClients;
 };
 
-std::shared_ptr<lol::LeagueClient> InstanceManager::Get(uint32_t id) const {
+std::shared_ptr<voli::LeagueInstance> InstanceManager::Get(uint32_t id) const {
   auto it = mClients.find(id);
   return it == mClients.end() ? nullptr : it->second;
 };
