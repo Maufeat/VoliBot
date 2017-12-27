@@ -6,6 +6,7 @@
 #include <lol/def/LolHonorV2Ballot.hpp>
 #include <lol/def/LolChampSelectChampSelectSession.hpp>
 #include <lol/def/LolSummonerSummoner.hpp>
+#include <lol/def/LolEndOfGameEndOfGameStats.hpp>
 
 #include <lol/op/AsyncStatus.hpp>
 #include <lol/op/PostLolLoginV1Session.hpp>
@@ -48,6 +49,7 @@ int main()
 	VoliServer server(service, 8000);
 	manager.Start();
 	manager.onevent.emplace(".*", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		//voli::print(c.lolUsername, m.str());
 	});
 
 	/**
@@ -83,6 +85,40 @@ int main()
 		case lol::PluginResourceEventType::Create_e:
 		case lol::PluginResourceEventType::Update_e:
 			c.trashbin["currentSummoner"] = data;
+			break;
+		}
+	});
+
+	// /lol-end-of-game/v1/eog-stats-block
+	manager.onevent.emplace("/lol-end-of-game/v1/eog-stats-block", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		switch (t) {
+		case lol::PluginResourceEventType::Create_e:
+			lol::LolEndOfGameEndOfGameStats eogStats = data;
+			voli::print(c.lolUsername, "Finished game. (+ " + to_string(eogStats.experienceEarned) + " EXP)");
+			auto x = lol::PostLolLobbyV2PlayAgain(c);
+			if (x) {
+				auto lobby = lol::GetLolLobbyV2Lobby(c);
+				if (lobby.data->canStartActivity == true) {
+					if (lobby.data->gameConfig.queueId == 450)
+						voli::print(c.lolUsername, "Joining ARAM Queue.");
+					else {
+						if (eogStats.currentLevel < 6) {
+							voli::print(c.lolUsername, "Joining COOP Queue.");
+						}
+						else {
+							auto &lobbyConfig = lol::LolLobbyLobbyChangeGameDto();
+							lobbyConfig.queueId = 450;
+							auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
+							if (res) {
+								if (res.data->canStartActivity == true) {
+									voli::print(c.lolUsername, "Changed now to ARAM Queue.");
+								}
+							}
+						}
+					}
+					lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+				}
+			}
 			break;
 		}
 	});
@@ -151,7 +187,7 @@ int main()
 		case lol::PluginResourceEventType::Create_e:
 		case lol::PluginResourceEventType::Update_e:
 			// TODO: Here we have to probably trigger reconnect.
-			voli::print(c.lolUsername, "Starting League of Legends.");
+			 voli::print(c.lolUsername, "Starting League of Legends.");
 			break;
 		}
 	});
@@ -167,30 +203,16 @@ int main()
 		case lol::PluginResourceEventType::Delete_e:
 			break;
 		case lol::PluginResourceEventType::Create_e:
-		case lol::PluginResourceEventType::Update_e:
 			lol::LolHonorV2Ballot ballot = data;
 			lol::LolHonorV2ApiHonorPlayerServerRequest honorRequest;
-			voli::print(c.lolUsername, "Finished game.");
 			auto randomPlayer = ballot.eligiblePlayers[random_number(ballot.eligiblePlayers.size() - 1)];
 			honorRequest.gameId = ballot.gameId;
 			honorRequest.summonerId = randomPlayer.summonerId;
-			honorRequest.honorCategory = "HEART";
-			voli::print(c.lolUsername, "We are honoring: " + randomPlayer.skinName);
+			std::string aCats[3] = { "SHOTCALLER", "HEART", "COOL" };
+			auto rndCat = aCats[random_number(3)];
+			honorRequest.honorCategory = rndCat;
+			voli::print(c.lolUsername, "We are honoring: " + randomPlayer.skinName + " with " + capitalize(rndCat));
 			lol::PostLolHonorV2V1HonorPlayer(c, honorRequest);
-			auto x = lol::PostLolLobbyV2PlayAgain(c);
-			if (!x.error) {
-				auto lobby = lol::GetLolLobbyV2Lobby(c);
-				if (lobby.data->canStartActivity == true) {
-						if (lobby.data->gameConfig.queueId == 830)
-							voli::print(c.lolUsername, "Joining ARAM Queue.");
-						else {
-							auto currentSummoner = lol::GetLolSummonerV1CurrentSummoner(c);
-							if (currentSummoner->summonerLevel < 6)
-								voli::print(c.lolUsername, "Joining COOP Queue.");
-						}
-					lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
-				}
-			}
 			break;
 		}
 	});
@@ -219,7 +241,12 @@ int main()
 		}
 	});
 
-	// /lol-matchmaking/v1/search
+
+	/**
+	* Here we handle Leaver Buster and output current queue times.
+	* We have to figure out how to wait for a leaver busted penality
+	* without creating a new thread and using std::chrono sleeps.
+	*/
 	manager.onevent.emplace("/lol-matchmaking/v1/search", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
@@ -250,7 +277,21 @@ int main()
 		}
 	});
 
-	// /lol-login/v1/session
+
+	manager.onevent.emplace("/lol-matchmaking/v1/search/errors", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		if (data.size() == 0) {
+			lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+		}
+	});
+
+	/**
+	* Handles our Login. We check for login state and outputs relevant states.
+	* If a new account is logged in, we create the summoner by capitalizing the
+	* username, if it fails we add one random number. Additional checks have to
+	* be implemented here, like check for 12 characters and other things.
+	* After a successfull login, we queue up for ARAM. If the account is not
+	* eligible to queue for ARAM, queue for INTRO COOP.
+	*/
 	manager.onevent.emplace("/lol-login/v1/session", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
@@ -278,7 +319,6 @@ int main()
 						lol::LolSummonerSummonerRequestedName name;
 						name.name = capitalize(c.lolUsername);
 						auto res = lol::PostLolSummonerV1Summoners(c, name);
-						//TODO: Check availability and then randomize if not available
 						if (res)
 							voli::print(c.lolUsername, "Summoner: " + name.name + " has been created.");
 						else {
@@ -303,7 +343,11 @@ int main()
 								voli::print(c.lolUsername, "Joining ARAM Queue.");
 							else if (lobbyConfig.queueId == 830)
 								voli::print(c.lolUsername, "Joining COOP Queue.");
-							lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+							auto queue = lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+							if (queue.error->errorCode == "GATEKEEPER_RESTRICTED") {
+								voli::print(c.lolUsername, queue.error->message);
+								voli::print(c.lolUsername, "Time until cleared: " + to_string((queue.error->payload[0].at("remainingMillis").get<int>() / 1000)) + "s");
+							}
 						}
 					}
 				}
