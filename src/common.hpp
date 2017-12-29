@@ -41,6 +41,8 @@ namespace voli {
 	public:
 		std::string lolUsername;
 		std::string lolPassword;
+		std::string lolRegion;
+		std::string currentStatus;
 		using lol::LeagueClient::LeagueClient;
 	};
 
@@ -50,7 +52,7 @@ namespace voli {
 	static void print_header() {
 
 		std::string line_1 = "Welcome to VoliBot";
-		std::string line_2 = "Version: 1.0.0";
+		std::string line_2 = "Version: BETA ALPHA GAMMA LAZOOOOR";
 		std::string line_3 = "www.VoliBot.com";
 
 		int columns;
@@ -62,7 +64,7 @@ namespace voli {
 #elif defined(OS_WIN)
 		CONSOLE_SCREEN_BUFFER_INFO csbi;
 		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-		SetConsoleTitle("Hey");
+		SetConsoleTitle("VoliBot - Title");
 		columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 #endif
 

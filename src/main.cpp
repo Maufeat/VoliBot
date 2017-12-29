@@ -7,6 +7,7 @@
 #include <lol/def/LolChampSelectChampSelectSession.hpp>
 #include <lol/def/LolSummonerSummoner.hpp>
 #include <lol/def/LolEndOfGameEndOfGameStats.hpp>
+#include <lol/def/LolGameflowGameflowSession.hpp>
 
 #include <lol/op/AsyncStatus.hpp>
 #include <lol/op/PostLolLoginV1Session.hpp>
@@ -32,13 +33,30 @@
 using namespace std;
 using namespace voli;
 
-struct ExampleEvent {
-  static constexpr const auto NAME = "ExampleEvent";
-  std::string message;
+
+struct ListInstance {
+	static constexpr const auto NAME = "ListInstance";
+	json message;
 };
 
-static void to_json(json& j, const ExampleEvent& v) {
-  j["message"] = v.message;
+static void to_json(json& j, const ListInstance& v) {
+	j["List"] = v.message;
+}
+
+struct UpdateStatus {
+	static constexpr const auto NAME = "UpdateStatus";
+	uint32_t id;
+	std::string message;
+};
+
+static void to_json(json& j, const UpdateStatus& v) {
+	j["id"] = v.id;
+	j["message"] = v.message;
+}
+
+static void notifyUpdateStatus(std::string status, voli::LeagueInstance& client, VoliServer& server) {
+	client.currentStatus = status;
+	server.broadcast(UpdateStatus{ client.id, status });
 }
 
 int main()
@@ -48,8 +66,9 @@ int main()
 	InstanceManager manager(service);
 	VoliServer server(service, 8000);
 	manager.Start();
-	manager.onevent.emplace(".*", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace(".*", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		//voli::print(c.lolUsername, m.str());
+		//notifyUpdateStatus(m.str(), c, server);
 	});
 
 	/**
@@ -89,11 +108,26 @@ int main()
 		}
 	});
 
+	/*manager.onevent.emplace("/lol-honor-v2/v1/reward-granted", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		lol::PostLolHonorV2V1RewardGrantedAck(c);
+	});*/
+
+	manager.onevent.emplace("/lol-gameflow/v1/session", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		switch (t) {
+		case lol::PluginResourceEventType::Update_e:
+		case lol::PluginResourceEventType::Create_e:
+			lol::LolGameflowGameflowSession flow = data;
+			voli::print("GameFlow", to_string(flow.phase));
+			break;
+		}
+	});
+
 	// /lol-end-of-game/v1/eog-stats-block
-	manager.onevent.emplace("/lol-end-of-game/v1/eog-stats-block", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/lol-end-of-game/v1/eog-stats-block", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Create_e:
 			lol::LolEndOfGameEndOfGameStats eogStats = data;
+			notifyUpdateStatus("Finished game (+ " + to_string(eogStats.experienceEarned) + " EXP)", c, server);
 			voli::print(c.lolUsername, "Finished game. (+ " + to_string(eogStats.experienceEarned) + " EXP)");
 			auto x = lol::PostLolLobbyV2PlayAgain(c);
 			if (x) {
@@ -130,7 +164,7 @@ int main()
 	* size is 0, because ARAM requires no actions. Here we should also handle
 	* trading requests in ARAM, to give Human Players prefered champions.
 	*/
-	manager.onevent.emplace("/lol-champ-select/v1/session", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/lol-champ-select/v1/session", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
 			break;
@@ -142,6 +176,7 @@ int main()
 				for (auto const& player : champSelectSession.myTeam) {
 					if (player.cellId == champSelectSession.localPlayerCellId && player.championId > 0) {
 						auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, player.summonerId, player.championId);
+						notifyUpdateStatus("Champion Selection", c, server);
 						voli::print(c.lolUsername, "We've got: " + championInfos.data->name);
 					}
 				}
@@ -165,8 +200,9 @@ int main()
 								lol::PatchLolChampSelectV1SessionActionsById(c, csAction.id, csAction);
 								lol::PostLolChampSelectV1SessionActionsByIdComplete(c, csAction.id);
 							}
-							else if (aaction.at("type").get<std::string>() == "ban")
+							else if (aaction.at("type").get<std::string>() == "ban") {
 								voli::print(c.lolUsername, "We have to ban.");
+							}
 						}
 					}
 				}
@@ -180,14 +216,15 @@ int main()
 	* should be also another way to get this done with checks and probably
 	* a way to reconnect to the game when disconnected.
 	*/
-	manager.onevent.emplace("/data-store/v1/install-settings/gameflow-process-info", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/data-store/v1/install-settings/gameflow-process-info", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
 			break;
 		case lol::PluginResourceEventType::Create_e:
 		case lol::PluginResourceEventType::Update_e:
 			// TODO: Here we have to probably trigger reconnect.
-			 voli::print(c.lolUsername, "Starting League of Legends.");
+			notifyUpdateStatus("In Game", c, server);
+			voli::print(c.lolUsername, "Starting League of Legends.");
 			break;
 		}
 	});
@@ -209,7 +246,7 @@ int main()
 			honorRequest.gameId = ballot.gameId;
 			honorRequest.summonerId = randomPlayer.summonerId;
 			std::string aCats[3] = { "SHOTCALLER", "HEART", "COOL" };
-			auto rndCat = aCats[random_number(3)];
+			auto rndCat = aCats[random_number(3) - 1];
 			honorRequest.honorCategory = rndCat;
 			voli::print(c.lolUsername, "We are honoring: " + randomPlayer.skinName + " with " + capitalize(rndCat));
 			lol::PostLolHonorV2V1HonorPlayer(c, honorRequest);
@@ -247,31 +284,34 @@ int main()
 	* We have to figure out how to wait for a leaver busted penality
 	* without creating a new thread and using std::chrono sleeps.
 	*/
-	manager.onevent.emplace("/lol-matchmaking/v1/search", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/lol-matchmaking/v1/search", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
 			break;
 		case lol::PluginResourceEventType::Create_e:
 		case lol::PluginResourceEventType::Update_e:
 			lol::LolMatchmakingMatchmakingSearchResource searchResource = data;
-			for (auto const& error : searchResource.errors) {
-				if (error.errorType == "LEAVER_BUSTER_TAINTED_WARNING") {
-					voli::print(c.lolUsername, "Removing Leaver Busted Warning.");
-					lol::DeleteLolLeaverBusterV1NotificationsById(c, 1);
-					lol::DeleteLolLeaverBusterV1NotificationsById(c, 2);
-					lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
-				}
-			}
 			switch (searchResource.searchState) {
 			case lol::LolMatchmakingMatchmakingSearchState::Found_e:
 				c.trashbin.erase("searchQueue");
 				break;
 			case lol::LolMatchmakingMatchmakingSearchState::Searching_e:
 				const auto& lastQueuePos = c.trashbin.find("searchQueue");
+				const auto& penalty = c.trashbin.find("penalty");
 				if (lastQueuePos != c.trashbin.end())
 					break;
-				c.trashbin["searchQueue"] = searchResource;
-				voli::print(c.lolUsername, "In Queue (Estimated Queue Time: " + to_string((int)searchResource.estimatedQueueTime) + "s)");
+				if (penalty != c.trashbin.end() && searchResource.lowPriorityData.penaltyTimeRemaining != 0)
+					break;
+				if (searchResource.lowPriorityData.penaltyTimeRemaining != 0) {
+					c.trashbin["penalty"] = searchResource;
+					voli::print(c.lolUsername, "Couldn't queue. Remaining Penalty: " + to_string((int)searchResource.lowPriorityData.penaltyTimeRemaining) + "s");
+					break;
+				}
+				else {
+					c.trashbin["searchQueue"] = searchResource;
+					notifyUpdateStatus("In Queue (" + to_string((int)searchResource.estimatedQueueTime) + "s)", c, server);
+					voli::print(c.lolUsername, "In Queue (Estimated Queue Time: " + to_string((int)searchResource.estimatedQueueTime) + "s)");
+				}
 				break;
 			}
 		}
@@ -280,7 +320,7 @@ int main()
 
 	manager.onevent.emplace("/lol-matchmaking/v1/search/errors", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		if (data.size() == 0) {
-			lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+			//lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 		}
 	});
 
@@ -292,7 +332,7 @@ int main()
 	* After a successfull login, we queue up for ARAM. If the account is not
 	* eligible to queue for ARAM, queue for INTRO COOP.
 	*/
-	manager.onevent.emplace("/lol-login/v1/session", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/lol-login/v1/session", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
 			break;
@@ -308,6 +348,7 @@ int main()
 						if (lastQueuePos->second.at("estimatedPositionInQueue").get<uint64_t>() == loginSession.queueStatus->estimatedPositionInQueue)
 							break;
 					c.trashbin["queuePos"] =  loginSession.queueStatus;
+					notifyUpdateStatus("Logging in. (" + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)", c, server);
 					voli::print(c.lolUsername, "Logging in. (Queue Position: " + to_string(loginSession.queueStatus->estimatedPositionInQueue) + " - " + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)");
 				}
 				break;
@@ -315,6 +356,7 @@ int main()
 			case lol::LolLoginLoginSessionStates::SUCCEEDED_e:
 				if (loginSession.connected) {
 					voli::print(c.lolUsername, "Successfully logged in.");
+					notifyUpdateStatus("Logged in.", c, server);
 					if (loginSession.isNewPlayer) {
 						lol::LolSummonerSummonerRequestedName name;
 						name.name = capitalize(c.lolUsername);
@@ -332,6 +374,7 @@ int main()
 					}
 					auto &lobbyConfig = lol::LolLobbyLobbyChangeGameDto();
 					auto currentSummoner = lol::GetLolSummonerV1CurrentSummoner(c);
+					c.trashbin["currentSummoner"] = currentSummoner.data;
 					if (currentSummoner->summonerLevel < 6)
 						lobbyConfig.queueId = 830;
 					else
@@ -346,13 +389,17 @@ int main()
 							auto queue = lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 							if (queue.error->errorCode == "GATEKEEPER_RESTRICTED") {
 								voli::print(c.lolUsername, queue.error->message);
-								voli::print(c.lolUsername, "Time until cleared: " + to_string((queue.error->payload[0].at("remainingMillis").get<int>() / 1000)) + "s");
+								for (auto const& error : queue.error->payload) {
+									notifyUpdateStatus("Waiting to Queue (" + to_string((error.at("remainingMillis").get<int>() / 1000)) + "s)", c, server);
+									voli::print(c.lolUsername, "Time until cleared: " + to_string((error.at("remainingMillis").get<int>() / 1000)) + "s");
+								}
 							}
 						}
 					}
 				}
 				break;
 			case lol::LolLoginLoginSessionStates::LOGGING_OUT_e:
+				notifyUpdateStatus("Logged out", c, server);
 				voli::print(c.lolUsername, "Logging out.");
 				c.wss.stop();
 				break;
@@ -362,8 +409,23 @@ int main()
 	});
 
 	// TODO: Web Server handling
-	server.addHandler("test", [&server](json data) {
-		server.broadcast(ExampleEvent{ "haha" });
+	server.addHandler("RequestInstanceList", [&server, &manager](json data) {
+		auto x = manager.GetAll();
+		json message;
+		for (auto const& lol : x) {
+			message[lol.second->id] = { lol.second->id, lol.second->currentStatus, lol.second->trashbin["currentSummoner"].dump() };
+		}
+		server.broadcast(ListInstance{ message });
+		return std::string("success");
+	});
+
+	server.addHandler("RequestInstanceStart", [&server, &manager](json data) {
+		auto x = manager.GetAll();
+		json message;
+		for (auto const& lol : x) {
+			message[lol.second->id] = { lol.second->id, lol.second->currentStatus, lol.second->trashbin["currentSummoner"].dump() };
+		}
+		server.broadcast(ListInstance{ message });
 		return std::string("success");
 	});
 	service->run();

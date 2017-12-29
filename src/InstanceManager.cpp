@@ -65,7 +65,7 @@ void InstanceManager::Start() {
   auto x = launchWithArgs("D:/Riot Games/League of Legends/", "--headless --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
   if (x != 0) {
 	  std::shared_ptr<voli::LeagueInstance> client = std::make_shared<voli::LeagueInstance>("127.0.0.1", port, password);
-	  client->lolUsername = "drewbyte";
+	  client->lolUsername = "MaufeatDevTest";
 	  client->lolPassword = "gV4129bC";
 	  Add(client);
   }
