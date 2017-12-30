@@ -20,7 +20,7 @@ namespace voli {
     std::shared_ptr<voli::LeagueInstance> Get(uint32_t id) const;
     const std::unordered_map<uint32_t, std::shared_ptr<voli::LeagueInstance>>& GetAll() const;
     void remove(uint32_t id);
-    void Start();
+	void Start(std::string lolUsername, std::string lolPassword, std::string region);
     std::function<void(voli::LeagueInstance&)> onwelcome;
     std::function<void(uint32_t id)> onclose;
     EventMap onevent;

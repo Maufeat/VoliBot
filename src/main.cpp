@@ -26,7 +26,13 @@
 #include <lol/op/PostLolLoginV1NewPlayerFlowCompleted.hpp>
 #include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
 #include <lol/op/PostLolChampSelectV1SessionActionsByIdComplete.hpp>
+#include <lol/op/PostLolGameflowV1Reconnect.hpp>
+#include <lol/op/GetLolEndOfGameV1EogStatsBlock.hpp>
+#include <lol/op/PostLolGameflowV1PreEndGameTransition.hpp>
 #include <lol/op/PatchLolChampSelectV1SessionActionsById.hpp>
+#include <lol/op/GetPatcherV1ProductsByProductIdState.hpp>
+#include <lol/op/GetRiotclientGetRegionLocale.hpp>
+#include <lol/op/PostRiotclientSetRegionLocale.hpp>
 
 #include "common.hpp"
 
@@ -47,16 +53,31 @@ struct UpdateStatus {
 	static constexpr const auto NAME = "UpdateStatus";
 	uint32_t id;
 	std::string message;
+	json summoner;
 };
 
 static void to_json(json& j, const UpdateStatus& v) {
 	j["id"] = v.id;
-	j["message"] = v.message;
+	j["status"] = v.message;
+	j["summoner"] = v.summoner;
 }
 
+/*
+	We update our web interface status.
+*/
 static void notifyUpdateStatus(std::string status, voli::LeagueInstance& client, VoliServer& server) {
 	client.currentStatus = status;
-	server.broadcast(UpdateStatus{ client.id, status });
+	auto x = lol::GetLolSummonerV1CurrentSummoner(client);
+	server.broadcast(UpdateStatus{ client.id, status, x.data });
+}
+static void checkRegion(voli::LeagueInstance& c) {
+	auto payload = lol::GetRiotclientGetRegionLocale(c);
+	if (payload) {
+		if (c.lolRegion != payload.data->region) {
+			voli::print(c.lolUsername, "Region change from " + payload.data->region + " to " + c.lolRegion + " requested.");
+			lol::PostRiotclientSetRegionLocale(c, c.lolRegion, payload.data->locale);
+		}
+	}
 }
 
 int main()
@@ -65,7 +86,6 @@ int main()
 	auto service = make_shared<IoService>();
 	InstanceManager manager(service);
 	VoliServer server(service, 8000);
-	manager.Start();
 	manager.onevent.emplace(".*", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		//voli::print(c.lolUsername, m.str());
 		//notifyUpdateStatus(m.str(), c, server);
@@ -80,6 +100,7 @@ int main()
 	manager.onevent.emplace("/plugin-manager/v1/status",
 		[](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const lol::PluginManagerResource& data) {
 		if (data.state == lol::PluginManagerState::PluginsInitialized_e) {
+			checkRegion(c);
 			auto res = lol::PostLolLoginV1Session(c, { c.lolUsername, c.lolPassword });
 			if (res) {
 				if (res.data->error) {
@@ -112,46 +133,65 @@ int main()
 		lol::PostLolHonorV2V1RewardGrantedAck(c);
 	});*/
 
-	manager.onevent.emplace("/lol-gameflow/v1/session", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/lol-gameflow/v1/session", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Update_e:
 		case lol::PluginResourceEventType::Create_e:
 			lol::LolGameflowGameflowSession flow = data;
-			voli::print("GameFlow", to_string(flow.phase));
-			break;
-		}
-	});
-
-	// /lol-end-of-game/v1/eog-stats-block
-	manager.onevent.emplace("/lol-end-of-game/v1/eog-stats-block", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
-		switch (t) {
-		case lol::PluginResourceEventType::Create_e:
-			lol::LolEndOfGameEndOfGameStats eogStats = data;
-			notifyUpdateStatus("Finished game (+ " + to_string(eogStats.experienceEarned) + " EXP)", c, server);
-			voli::print(c.lolUsername, "Finished game. (+ " + to_string(eogStats.experienceEarned) + " EXP)");
-			auto x = lol::PostLolLobbyV2PlayAgain(c);
-			if (x) {
-				auto lobby = lol::GetLolLobbyV2Lobby(c);
-				if (lobby.data->canStartActivity == true) {
-					if (lobby.data->gameConfig.queueId == 450)
-						voli::print(c.lolUsername, "Joining ARAM Queue.");
-					else {
-						if (eogStats.currentLevel < 6) {
-							voli::print(c.lolUsername, "Joining COOP Queue.");
-						}
-						else {
-							auto &lobbyConfig = lol::LolLobbyLobbyChangeGameDto();
-							lobbyConfig.queueId = 450;
-							auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
-							if (res) {
-								if (res.data->canStartActivity == true) {
-									voli::print(c.lolUsername, "Changed now to ARAM Queue.");
+			switch (flow.phase) {
+			case lol::LolGameflowGameflowPhase::None_e:
+				break;
+			case lol::LolGameflowGameflowPhase::WaitingForStats_e:
+			{
+				notifyUpdateStatus("Waiting for Stats", c, server);
+				voli::print(c.lolUsername, "Waiting for Stats. (End of Game)");
+				lol::PostLolGameflowV1PreEndGameTransition(c, true);
+				auto eog = lol::GetLolEndOfGameV1EogStatsBlock(c);
+				if (eog.data) {
+					lol::LolEndOfGameEndOfGameStats eogStats = *eog.data;
+					notifyUpdateStatus("Finished game (+ " + to_string(eogStats.experienceEarned) + " EXP)", c, server);
+					voli::print(c.lolUsername, "Finished game. (+ " + to_string(eogStats.experienceEarned) + " EXP)");
+					auto playAgain = lol::PostLolLobbyV2PlayAgain(c);
+					if (playAgain) {
+						auto lobby = lol::GetLolLobbyV2Lobby(c);
+						if (lobby.data->canStartActivity == true) {
+							if (lobby.data->gameConfig.queueId == 450)
+								voli::print(c.lolUsername, "Joining ARAM Queue.");
+							else {
+								if (eogStats.currentLevel < 6) 
+									voli::print(c.lolUsername, "Joining COOP Queue.");
+								else {
+									auto &lobbyConfig = lol::LolLobbyLobbyChangeGameDto();
+									lobbyConfig.queueId = 450;
+									auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
+									if (res)
+										if (res.data->canStartActivity == true) 
+											voli::print(c.lolUsername, "Changed now to ARAM Queue.");
 								}
 							}
+							lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 						}
 					}
-					lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 				}
+				break;
+			}
+			case lol::LolGameflowGameflowPhase::GameStart_e:
+				notifyUpdateStatus("Starting League of Legends.", c, server);
+				voli::print(c.lolUsername, "Starting League of Legends.");
+				break;
+			case lol::LolGameflowGameflowPhase::Reconnect_e:
+				notifyUpdateStatus("Reconnecting...", c, server);
+				voli::print(c.lolUsername, "Client probably crashed. Reconnecting...");
+				lol::PostLolGameflowV1Reconnect(c);
+				break;
+			case lol::LolGameflowGameflowPhase::FailedToLaunch_e:
+				notifyUpdateStatus("Reconnecting...", c, server);
+				voli::print(c.lolUsername, "Failed to Launch. Reconnecting...");
+				lol::PostLolGameflowV1Reconnect(c);
+				break;
+			case lol::LolGameflowGameflowPhase::InProgress_e:
+				notifyUpdateStatus("In Game", c, server);
+				break;
 			}
 			break;
 		}
@@ -176,8 +216,10 @@ int main()
 				for (auto const& player : champSelectSession.myTeam) {
 					if (player.cellId == champSelectSession.localPlayerCellId && player.championId > 0) {
 						auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, player.summonerId, player.championId);
-						notifyUpdateStatus("Champion Selection", c, server);
+						voli::print(c.lolUsername, "In Champion Selection");
 						voli::print(c.lolUsername, "We've got: " + championInfos.data->name);
+						notifyUpdateStatus("We've got: " + championInfos.data->name, c, server);
+						notifyUpdateStatus("Champion Selection", c, server);
 					}
 				}
 			}
@@ -190,7 +232,10 @@ int main()
 								auto randomId = pickable->championIds[random_number(pickable->championIds.size() - 1)];
 								lol::LolSummonerSummoner summonerInfo = c.trashbin["currentSummoner"];
 								auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, summonerInfo.summonerId, randomId);
+								voli::print(c.lolUsername, "In Champion Selection");
 								voli::print(c.lolUsername, "We are picking: " + championInfos->name);
+								notifyUpdateStatus("We are picking: " + championInfos.data->name, c, server);
+								notifyUpdateStatus("Champion Selection", c, server);
 								lol::LolChampSelectChampSelectAction csAction;
 								csAction.actorCellId = champSelectSession.localPlayerCellId;
 								csAction.championId = randomId;
@@ -201,30 +246,13 @@ int main()
 								lol::PostLolChampSelectV1SessionActionsByIdComplete(c, csAction.id);
 							}
 							else if (aaction.at("type").get<std::string>() == "ban") {
+								voli::print(c.lolUsername, "In Champion Selection");
 								voli::print(c.lolUsername, "We have to ban.");
 							}
 						}
 					}
 				}
 			}
-			break;
-		}
-	});
-
-	/**
-	* Gets triggered when the League Of Legends Client is started. There
-	* should be also another way to get this done with checks and probably
-	* a way to reconnect to the game when disconnected.
-	*/
-	manager.onevent.emplace("/data-store/v1/install-settings/gameflow-process-info", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
-		switch (t) {
-		case lol::PluginResourceEventType::Delete_e:
-			break;
-		case lol::PluginResourceEventType::Create_e:
-		case lol::PluginResourceEventType::Update_e:
-			// TODO: Here we have to probably trigger reconnect.
-			notifyUpdateStatus("In Game", c, server);
-			voli::print(c.lolUsername, "Starting League of Legends.");
 			break;
 		}
 	});
@@ -246,7 +274,8 @@ int main()
 			honorRequest.gameId = ballot.gameId;
 			honorRequest.summonerId = randomPlayer.summonerId;
 			std::string aCats[3] = { "SHOTCALLER", "HEART", "COOL" };
-			auto rndCat = aCats[random_number(3) - 1];
+			int rndInt = random_number(2);
+			auto rndCat = aCats[rndInt];
 			honorRequest.honorCategory = rndCat;
 			voli::print(c.lolUsername, "We are honoring: " + randomPlayer.skinName + " with " + capitalize(rndCat));
 			lol::PostLolHonorV2V1HonorPlayer(c, honorRequest);
@@ -304,6 +333,7 @@ int main()
 					break;
 				if (searchResource.lowPriorityData.penaltyTimeRemaining != 0) {
 					c.trashbin["penalty"] = searchResource;
+					notifyUpdateStatus("Couldn't queue. Remaining Penalty: " + to_string((int)searchResource.lowPriorityData.penaltyTimeRemaining) + "s", c, server);
 					voli::print(c.lolUsername, "Couldn't queue. Remaining Penalty: " + to_string((int)searchResource.lowPriorityData.penaltyTimeRemaining) + "s");
 					break;
 				}
@@ -382,10 +412,14 @@ int main()
 					auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
 					if (res) {
 						if (res.data->canStartActivity == true) {
-							if (lobbyConfig.queueId == 450)
+							if (lobbyConfig.queueId == 450) {
+								notifyUpdateStatus("Joining ARAM Queue.", c, server);
 								voli::print(c.lolUsername, "Joining ARAM Queue.");
-							else if (lobbyConfig.queueId == 830)
+							}
+							else if (lobbyConfig.queueId == 830) {
+								notifyUpdateStatus("Joining COOP Queue.", c, server);
 								voli::print(c.lolUsername, "Joining COOP Queue.");
+							}
 							auto queue = lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 							if (queue.error->errorCode == "GATEKEEPER_RESTRICTED") {
 								voli::print(c.lolUsername, queue.error->message);
@@ -399,7 +433,7 @@ int main()
 				}
 				break;
 			case lol::LolLoginLoginSessionStates::LOGGING_OUT_e:
-				notifyUpdateStatus("Logged out", c, server);
+				notifyUpdateStatus("Logging out", c, server);
 				voli::print(c.lolUsername, "Logging out.");
 				c.wss.stop();
 				break;
@@ -408,24 +442,24 @@ int main()
 		}
 	});
 
-	// TODO: Web Server handling
+	// TODO: Creating struct for json to serialize
+
 	server.addHandler("RequestInstanceList", [&server, &manager](json data) {
 		auto x = manager.GetAll();
 		json message;
 		for (auto const& lol : x) {
-			message[lol.second->id] = { lol.second->id, lol.second->currentStatus, lol.second->trashbin["currentSummoner"].dump() };
+			message[lol.second->id] = { {"id", lol.second->id}, {"status", lol.second->currentStatus}, {"summoner", lol.second->trashbin["currentSummoner"] } };
 		}
 		server.broadcast(ListInstance{ message });
 		return std::string("success");
 	});
 
 	server.addHandler("RequestInstanceStart", [&server, &manager](json data) {
-		auto x = manager.GetAll();
-		json message;
-		for (auto const& lol : x) {
-			message[lol.second->id] = { lol.second->id, lol.second->currentStatus, lol.second->trashbin["currentSummoner"].dump() };
-		}
-		server.broadcast(ListInstance{ message });
+		std::string username = data.at("username").get<std::string>();
+		std::string password = data.at("password").get<std::string>();
+		std::string region = data.at("region").get<std::string>();
+		voli::printSystem("Adding new Account (" + username + ") at " + region);
+		manager.Start(username, password, region);
 		return std::string("success");
 	});
 	service->run();
