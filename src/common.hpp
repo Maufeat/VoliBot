@@ -37,13 +37,31 @@ namespace voli {
 
 
 
-	class LeagueInstance : public lol::LeagueClient {
+	class LeagueInstance {
 	public:
 		std::string lolUsername;
 		std::string lolPassword;
 		std::string lolRegion;
 		std::string currentStatus;
-		using lol::LeagueClient::LeagueClient;
+        std::string auth;
+        lol::WssClient wss;
+        lol::HttpsClient https;
+        lol::HttpsClient httpsa;
+        uint32_t id;
+        json trashbin;
+
+        LeagueInstance(const LeagueInstance&) = delete;
+        LeagueInstance(const std::string& address, int port, const std::string& password, uint32_t id = 0) :
+            auth("Basic " + SimpleWeb::Crypto::Base64::encode("riot:" + password)),
+            wss(address + ":" + std::to_string(port), false),
+            https(address + ":" + std::to_string(port), false),
+            httpsa(address + ":" + std::to_string(port), false)
+        {
+            wss.config.header = {
+                { "authorization", auth },
+                { "sec-websocket-protocol", "wamp" }
+            };
+        }
 	};
 
 

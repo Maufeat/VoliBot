@@ -375,7 +375,7 @@ int main()
 				if (loginSession.queueStatus) {
 					const auto& lastQueuePos = c.trashbin.find("queuePos");
 					if (lastQueuePos != c.trashbin.end())
-						if (lastQueuePos->second.at("estimatedPositionInQueue").get<uint64_t>() == loginSession.queueStatus->estimatedPositionInQueue)
+						if (lastQueuePos->at("estimatedPositionInQueue").get<uint64_t>() == loginSession.queueStatus->estimatedPositionInQueue)
 							break;
 					c.trashbin["queuePos"] =  loginSession.queueStatus;
 					notifyUpdateStatus("Logging in. (" + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)", c, server);
