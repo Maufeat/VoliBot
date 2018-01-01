@@ -59,7 +59,7 @@ InstanceManager::InstanceManager(IoServicePtr service) : mService(service) {
 
 }
 
-void InstanceManager::Start(std::string lolUsername, std::string lolPassword, std::string region) {
+void InstanceManager::Start(std::string lolUsername, std::string lolPassword, std::string region, int queue, bool autoplay = false) {
   int port = freePort();
   std::string password = random_string(21);
   auto x = launchWithArgs("D:/Riot Games/League of Legends/", "--headless --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
@@ -68,6 +68,8 @@ void InstanceManager::Start(std::string lolUsername, std::string lolPassword, st
 	  client->lolUsername = lolUsername;
 	  client->lolPassword = lolPassword;
 	  client->lolRegion = region;
+	  client->queue = queue;
+	  client->autoplay = autoplay;
 	  Add(client);
   }
   else

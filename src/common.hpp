@@ -42,12 +42,15 @@ namespace voli {
 		std::string lolUsername;
 		std::string lolPassword;
 		std::string lolRegion;
-		std::string currentStatus;
+		std::string currentStatus
         std::string auth;
         lol::WssClient wss;
         lol::HttpsClient https;
         lol::HttpsClient httpsa;
         uint32_t id;
+        int queue;
+        bool autoplay;
+        using lol::LeagueClient::LeagueClient;
         json trashbin;
 
         LeagueInstance(const LeagueInstance&) = delete;
