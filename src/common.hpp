@@ -43,6 +43,8 @@ namespace voli {
 		std::string lolPassword;
 		std::string lolRegion;
 		std::string currentStatus;
+		int queue;
+		bool autoplay;
 		using lol::LeagueClient::LeagueClient;
 	};
 

@@ -20,6 +20,7 @@
 #include <lol/op/GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId.hpp>
 #include <lol/op/GetLolMatchmakingV1Search.hpp>
 #include <lol/op/GetLolLobbyV2Lobby.hpp>
+#include <lol/op/GetLolLoginV1Wallet.hpp>
 #include <lol/op/GetLolSummonerV1CurrentSummoner.hpp>
 #include <lol/op/GetLolChampSelectV1PickableChampions.hpp>
 #include <lol/op/PutLolSummonerV1CurrentSummonerIcon.hpp>
@@ -32,6 +33,7 @@
 #include <lol/op/PatchLolChampSelectV1SessionActionsById.hpp>
 #include <lol/op/GetPatcherV1ProductsByProductIdState.hpp>
 #include <lol/op/GetRiotclientGetRegionLocale.hpp>
+#include <lol/op/PostProcessControlV1ProcessQuit.hpp>
 #include <lol/op/PostRiotclientSetRegionLocale.hpp>
 
 #include "common.hpp"
@@ -54,12 +56,23 @@ struct UpdateStatus {
 	uint32_t id;
 	std::string message;
 	json summoner;
+	json wallet;
 };
 
 static void to_json(json& j, const UpdateStatus& v) {
 	j["id"] = v.id;
 	j["status"] = v.message;
 	j["summoner"] = v.summoner;
+	j["wallet"] = v.wallet;
+}
+
+struct LoggingOut {
+	static constexpr const auto NAME = "LoggingOut";
+	uint32_t id;
+};
+
+static void to_json(json& j, const LoggingOut& v) {
+	j["id"] = v.id;
 }
 
 /*
@@ -68,7 +81,8 @@ static void to_json(json& j, const UpdateStatus& v) {
 static void notifyUpdateStatus(std::string status, voli::LeagueInstance& client, VoliServer& server) {
 	client.currentStatus = status;
 	auto x = lol::GetLolSummonerV1CurrentSummoner(client);
-	server.broadcast(UpdateStatus{ client.id, status, x.data });
+	auto y = lol::GetLolLoginV1Wallet(client);
+	server.broadcast(UpdateStatus{ client.id, status, x.data, y.data  });
 }
 static void checkRegion(voli::LeagueInstance& c) {
 	auto payload = lol::GetRiotclientGetRegionLocale(c);
@@ -129,6 +143,17 @@ int main()
 		}
 	});
 
+	manager.onevent.emplace("/lol-login/v1/wallet", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		switch (t) {
+		case lol::PluginResourceEventType::Delete_e:
+			break;
+		case lol::PluginResourceEventType::Create_e:
+		case lol::PluginResourceEventType::Update_e:
+			c.trashbin["wallet"] = data;
+			break;
+		}
+	});
+
 	/*manager.onevent.emplace("/lol-honor-v2/v1/reward-granted", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		lol::PostLolHonorV2V1RewardGrantedAck(c);
 	});*/
@@ -152,7 +177,7 @@ int main()
 					notifyUpdateStatus("Finished game (+ " + to_string(eogStats.experienceEarned) + " EXP)", c, server);
 					voli::print(c.lolUsername, "Finished game. (+ " + to_string(eogStats.experienceEarned) + " EXP)");
 					auto playAgain = lol::PostLolLobbyV2PlayAgain(c);
-					if (playAgain) {
+					if (playAgain && c.autoplay) {
 						auto lobby = lol::GetLolLobbyV2Lobby(c);
 						if (lobby.data->canStartActivity == true) {
 							if (lobby.data->gameConfig.queueId == 450)
@@ -362,7 +387,7 @@ int main()
 	* After a successfull login, we queue up for ARAM. If the account is not
 	* eligible to queue for ARAM, queue for INTRO COOP.
 	*/
-	manager.onevent.emplace("/lol-login/v1/session", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+	manager.onevent.emplace("/lol-login/v1/session", [&server, &manager](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		switch (t) {
 		case lol::PluginResourceEventType::Delete_e:
 			break;
@@ -410,7 +435,7 @@ int main()
 					else
 						lobbyConfig.queueId = 450;
 					auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
-					if (res) {
+					if (res && c.autoplay) {
 						if (res.data->canStartActivity == true) {
 							if (lobbyConfig.queueId == 450) {
 								notifyUpdateStatus("Joining ARAM Queue.", c, server);
@@ -433,7 +458,6 @@ int main()
 				}
 				break;
 			case lol::LolLoginLoginSessionStates::LOGGING_OUT_e:
-				notifyUpdateStatus("Logging out", c, server);
 				voli::print(c.lolUsername, "Logging out.");
 				c.wss.stop();
 				break;
@@ -448,7 +472,7 @@ int main()
 		auto x = manager.GetAll();
 		json message;
 		for (auto const& lol : x) {
-			message[lol.second->id] = { {"id", lol.second->id}, {"status", lol.second->currentStatus}, {"summoner", lol.second->trashbin["currentSummoner"] } };
+			message[lol.second->id] = { {"id", lol.second->id}, {"status", lol.second->currentStatus}, {"summoner", lol.second->trashbin["currentSummoner"] }, {"wallet", lol.second->trashbin["wallet"]} };
 		}
 		server.broadcast(ListInstance{ message });
 		return std::string("success");
@@ -458,9 +482,25 @@ int main()
 		std::string username = data.at("username").get<std::string>();
 		std::string password = data.at("password").get<std::string>();
 		std::string region = data.at("region").get<std::string>();
+		int queue = data.at("queue").get<int>();
+		bool autoplay = data.at("autoplay").get<bool>();
 		voli::printSystem("Adding new Account (" + username + ") at " + region);
-		manager.Start(username, password, region);
+		manager.Start(username, password, region, queue, autoplay);
 		return std::string("success");
 	});
+
+	server.addHandler("RequestInstanceLogout", [&server, &manager](json data) {
+		int id = data.at("id").get<int>();
+		auto x = manager.Get(id);
+		auto y = lol::PostProcessControlV1ProcessQuit(*x);
+		if (y) {
+			server.broadcast(LoggingOut{ x->id });
+			manager.remove(id);
+			return std::string("success");
+		}
+		return std::string("failed");
+	});
+
+	voli::printSystem("Access VoliBot Web Manager: http://cdn.volibot.com/bot");
 	service->run();
 }
