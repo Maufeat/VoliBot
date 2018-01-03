@@ -57,6 +57,7 @@ struct UpdateStatus {
 	std::string message;
 	json summoner;
 	json wallet;
+	json settings;
 };
 
 static void to_json(json& j, const UpdateStatus& v) {
@@ -64,6 +65,19 @@ static void to_json(json& j, const UpdateStatus& v) {
 	j["status"] = v.message;
 	j["summoner"] = v.summoner;
 	j["wallet"] = v.wallet;
+	j["settings"] = v.settings;
+}
+
+
+struct UpdatePhase {
+	static constexpr const auto NAME = "UpdatePhase";
+	uint32_t id;
+	json phaseData;
+};
+
+static void to_json(json& j, const UpdatePhase& v) {
+	j["id"] = v.id;
+	j["phaseData"] = v.phaseData;
 }
 
 struct LoggingOut {
@@ -75,6 +89,17 @@ static void to_json(json& j, const LoggingOut& v) {
 	j["id"] = v.id;
 }
 
+struct Settings {
+	static constexpr const auto NAME = "Settings";
+	uint32_t id;
+	json settings;
+};
+
+static void to_json(json& j, const Settings& v) {
+	j["id"] = v.id;
+	j["settings"] = v.settings;
+}
+
 /*
 	We update our web interface status.
 */
@@ -82,8 +107,14 @@ static void notifyUpdateStatus(std::string status, voli::LeagueInstance& client,
 	client.currentStatus = status;
 	auto x = lol::GetLolSummonerV1CurrentSummoner(client);
 	auto y = lol::GetLolLoginV1Wallet(client);
-	server.broadcast(UpdateStatus{ client.id, status, x.data, y.data  });
+	json settings = { { "autoPlay", client.autoplay }, { "queue", client.queue } };
+	server.broadcast(UpdateStatus{ client.id, status, x.data, y.data, settings });
 }
+
+static void notifyUpdatePhase(json phase, voli::LeagueInstance& client, VoliServer &server) {
+	server.broadcast(UpdatePhase{ client.id, phase });
+}
+
 static void checkRegion(voli::LeagueInstance& c) {
 	auto payload = lol::GetRiotclientGetRegionLocale(c);
 	if (payload) {
@@ -115,7 +146,10 @@ int main()
 		[](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const lol::PluginManagerResource& data) {
 		if (data.state == lol::PluginManagerState::PluginsInitialized_e) {
 			checkRegion(c);
-			auto res = lol::PostLolLoginV1Session(c, { c.lolUsername, c.lolPassword });
+			lol::LolLoginUsernameAndPassword uap;
+			uap.password = c.lolPassword;
+			uap.username = c.lolUsername;
+			auto res = lol::PostLolLoginV1Session(c, uap);
 			if (res) {
 				if (res.data->error) {
 					if (res.data->error->messageId == "INVALID_CREDENTIALS") {
@@ -163,6 +197,7 @@ int main()
 		case lol::PluginResourceEventType::Update_e:
 		case lol::PluginResourceEventType::Create_e:
 			lol::LolGameflowGameflowSession flow = data;
+			notifyUpdatePhase(flow, c, server);
 			switch (flow.phase) {
 			case lol::LolGameflowGameflowPhase::None_e:
 				break;
@@ -400,10 +435,10 @@ int main()
 				if (loginSession.queueStatus) {
 					const auto& lastQueuePos = c.trashbin.find("queuePos");
 					if (lastQueuePos != c.trashbin.end())
-						if (lastQueuePos->at("estimatedPositionInQueue").get<uint64_t>() == loginSession.queueStatus->estimatedPositionInQueue)
+						if (lastQueuePos->at("approximateWaitTimeSeconds").get<uint64_t>() == loginSession.queueStatus->approximateWaitTimeSeconds)
 							break;
 					c.trashbin["queuePos"] =  loginSession.queueStatus;
-					notifyUpdateStatus("Logging in. (" + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)", c, server);
+					notifyUpdateStatus("Logging in. ("+ to_string(loginSession.queueStatus->estimatedPositionInQueue) +" | " + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)", c, server);
 					voli::print(c.lolUsername, "Logging in. (Queue Position: " + to_string(loginSession.queueStatus->estimatedPositionInQueue) + " - " + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)");
 				}
 				break;
@@ -472,7 +507,8 @@ int main()
 		auto x = manager.GetAll();
 		json message;
 		for (auto const& lol : x) {
-			message[lol.second->id] = { {"id", lol.second->id}, {"status", lol.second->currentStatus}, {"summoner", lol.second->trashbin["currentSummoner"] }, {"wallet", lol.second->trashbin["wallet"]} };
+			json settings = { { "autoPlay", lol.second->autoplay },{ "queue", lol.second->queue } };
+			message[lol.second->id] = { {"id", lol.second->id}, {"status", lol.second->currentStatus}, {"summoner", lol.second->trashbin["currentSummoner"] }, {"wallet", lol.second->trashbin["wallet"]}, {"settings", settings } };
 		}
 		server.broadcast(ListInstance{ message });
 		return std::string("success");
@@ -492,13 +528,33 @@ int main()
 	server.addHandler("RequestInstanceLogout", [&server, &manager](json data) {
 		int id = data.at("id").get<int>();
 		auto x = manager.Get(id);
-		auto y = lol::PostProcessControlV1ProcessQuit(*x);
-		if (y) {
-			server.broadcast(LoggingOut{ x->id });
-			manager.remove(id);
-			return std::string("success");
+		if (x) {
+			auto y = lol::PostProcessControlV1ProcessQuit(*x);
+			if (y) {
+				server.broadcast(LoggingOut{ x->id });
+				voli::print(x->lolUsername, "Logging out.");
+				voli::printSystem("Removing Account (" + x->lolUsername + ")");
+				manager.remove(id);
+				return std::string("success");
+			}
+			return std::string("failed");
 		}
 		return std::string("failed");
+	});
+
+	server.addHandler("RequestChangeSettings", [&server, &manager](json data) {
+		int id = data.at("id").get<int>();
+		return std::string("success");
+	});
+	
+	server.addHandler("RequestChangeAutoPlay", [&server, &manager](json data) {
+		int id = data.at("id").get<int>();
+		bool autoPlay = data.at("autoPlay").get<bool>();
+		auto x = manager.Get(id);
+		if (x) {
+			x->autoplay = true;
+		}
+		return std::string("success");
 	});
 
 	voli::printSystem("Access VoliBot Web Manager: http://cdn.volibot.com/bot");
