@@ -7,6 +7,9 @@ else()
 endif()
 
 add_subdirectory(LeagueAPI)
+add_subdirectory(sqlite)
+include_directories("${PROJECT_SOURCE_DIR}/sqlite")
+
 add_executable(VoliBot 
 src/main.cpp 
 src/common.hpp
@@ -15,4 +18,4 @@ src/InstanceManager.cpp
 src/VoliServer.hpp
 src/VoliServer.cpp
 src/message/MessageType.hpp)
-target_link_libraries(VoliBot leagueapi)
+target_link_libraries(VoliBot leagueapi sqlite3)
