@@ -7,7 +7,10 @@
 #include <lol/def/LolChampSelectChampSelectSession.hpp>
 #include <lol/def/LolSummonerSummoner.hpp>
 #include <lol/def/LolEndOfGameEndOfGameStats.hpp>
+#include <lol/def/LolPreEndOfGameSequenceEvent.hpp>
 #include <lol/def/LolGameflowGameflowSession.hpp>
+#include <lol/def/LeaverBusterNotificationResource.hpp>
+#include <lol/def/LolMatchmakingMatchmakingSearchErrorResource.hpp>
 
 #include <lol/op/AsyncStatus.hpp>
 #include <lol/op/PostLolLoginV1Session.hpp>
@@ -18,6 +21,7 @@
 #include <lol/op/PostLolLobbyV2PlayAgain.hpp>
 #include <lol/op/PostLolSummonerV1Summoners.hpp>
 #include <lol/op/GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId.hpp>
+#include <lol/op/PostPatcherV1ProductsByProductIdStartPatchingRequest.hpp>
 #include <lol/op/GetLolMatchmakingV1Search.hpp>
 #include <lol/op/GetLolLobbyV2Lobby.hpp>
 #include <lol/op/GetLolLoginV1Wallet.hpp>
@@ -35,6 +39,11 @@
 #include <lol/op/GetRiotclientGetRegionLocale.hpp>
 #include <lol/op/PostProcessControlV1ProcessQuit.hpp>
 #include <lol/op/PostRiotclientSetRegionLocale.hpp>
+#include <lol/op/PostLolPreEndOfGameV1CompleteBySequenceEventName.hpp>
+#include <lol/op/PostLolMissionsV1MissionsUpdate.hpp>
+#include <lol/op/GetLolLeaverBusterV1Notifications.hpp>
+#include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
+#include <lol/op/GetLolMatchmakingV1SearchErrors.hpp>
 
 #include "common.hpp"
 
@@ -115,6 +124,27 @@ static void notifyUpdatePhase(json phase, voli::LeagueInstance& client, VoliServ
 	server.broadcast(UpdatePhase{ client.id, phase });
 }
 
+static void checkUpdate(LeagueInstance& c, VoliServer &server, InstanceManager &im) {
+	auto state = lol::GetPatcherV1ProductsByProductIdState(c, "league_of_legends");
+	if (state->isCorrupted) {
+		voli::printSystem("League of Legends is corrupt.");
+	}
+	if (!state->isUpToDate) {
+		// check if updateavailable
+		if (state->isUpdateAvailable) {
+			voli::printSystem("New Patch available. Please wait for it to download and apply.");
+			lol::PostPatcherV1ProductsByProductIdStartPatchingRequest(c, "league_of_legends");
+			while (!state->isUpToDate) {
+				state = lol::GetPatcherV1ProductsByProductIdState(c, "league_of_legends");
+				voli::printSystem("Patched: " + to_string(state->percentPatched) + "%");
+			}
+		}
+		else {
+			voli::printSystem("League of Legends is outdated, but no patch available...");
+		}
+	}
+}
+
 static void checkRegion(voli::LeagueInstance& c) {
 	auto payload = lol::GetRiotclientGetRegionLocale(c);
 	if (payload) {
@@ -131,9 +161,23 @@ int main()
 	auto service = make_shared<IoService>();
 	InstanceManager manager(service);
 	VoliServer server(service, 8000);
+
+	/* Debug */
 	manager.onevent.emplace(".*", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
 		//voli::print(c.lolUsername, m.str());
 		//notifyUpdateStatus(m.str(), c, server);
+	});
+
+	manager.onevent.emplace("/lol-matchmaking/v1/search/errors", [&server](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		std::vector<lol::LolMatchmakingMatchmakingSearchErrorResource> errors = data;
+		for (auto const& error : errors) {
+			if (error.penaltyTimeRemaining <= 1 && errors.size() == 1) {
+				std::this_thread::sleep_for(std::chrono::seconds(1));
+				voli::print(c.lolUsername, "Joining queue.");
+				lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+			}
+			//voli::print(c.lolUsername, error.message + " | " + to_string(error.penaltyTimeRemaining) + " | " + to_string(t));
+		}
 	});
 
 	/**
@@ -143,9 +187,10 @@ int main()
 	* InstanceManager.
 	*/
 	manager.onevent.emplace("/plugin-manager/v1/status",
-		[](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const lol::PluginManagerResource& data) {
+		[&server, &manager](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const lol::PluginManagerResource& data) {
 		if (data.state == lol::PluginManagerState::PluginsInitialized_e) {
 			checkRegion(c);
+			checkUpdate(c, server, manager);
 			lol::LolLoginUsernameAndPassword uap;
 			uap.password = c.lolPassword;
 			uap.username = c.lolUsername;
@@ -161,6 +206,17 @@ int main()
 		}
 	});
 
+	manager.onevent.emplace("/lol-pre-end-of-game/v1/currentSequenceEvent", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		switch (t) {
+		case lol::PluginResourceEventType::Delete_e:
+			break;
+		case lol::PluginResourceEventType::Create_e:
+		case lol::PluginResourceEventType::Update_e:
+			lol::LolPreEndOfGameSequenceEvent eogEvent = data;
+			lol::PostLolPreEndOfGameV1CompleteBySequenceEventName(c, eogEvent.name);
+			break;
+		}
+	});
 	/**
 	* Saves our current summoner into trashbin. We can and should probably
 	* just request this endpoint when needed instead of storing it. But
@@ -408,9 +464,16 @@ int main()
 	});
 
 
-	manager.onevent.emplace("/lol-matchmaking/v1/search/errors", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
-		if (data.size() == 0) {
-			//lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
+	manager.onevent.emplace("/lol-leaver-buster/v1/notifications", [](voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const json& data) {
+		switch (t) {
+		case lol::PluginResourceEventType::Delete_e:
+			break;
+		case lol::PluginResourceEventType::Create_e:
+		case lol::PluginResourceEventType::Update_e:
+			std::vector<lol::LeaverBusterNotificationResource> lbNot = data;
+			for (auto &notif : lbNot)
+				lol::DeleteLolLeaverBusterV1NotificationsById(c, notif.id);
+			break;
 		}
 	});
 
@@ -451,7 +514,7 @@ int main()
 						lol::LolSummonerSummonerRequestedName name;
 						name.name = capitalize(c.lolUsername);
 						auto res = lol::PostLolSummonerV1Summoners(c, name);
-						if (res)
+						if (!res.error)
 							voli::print(c.lolUsername, "Summoner: " + name.name + " has been created.");
 						else {
 							name.name = name.name + to_string(random_number(1));
