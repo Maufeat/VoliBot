@@ -13,6 +13,7 @@ include_directories("${PROJECT_SOURCE_DIR}/sqlite")
 add_executable(VoliBot 
 src/main.cpp 
 src/common.hpp
+src/BotEvents.hpp
 src/InstanceManager.hpp
 src/InstanceManager.cpp
 src/VoliServer.hpp
