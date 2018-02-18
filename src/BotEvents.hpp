@@ -48,10 +48,51 @@
 #include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
 #include <lol/op/GetLolMatchmakingV1SearchErrors.hpp>
 
+#include "../sqlite/sqlite_orm.h"
+
+using namespace sqlite_orm;
+
 namespace voli {
 
 	static voli::VoliServer *server;
 	static voli::InstanceManager *manager;
+
+	struct Account {
+		int id;
+		std::string username;
+		std::string password;
+		std::string region;
+		int maxlvl;
+		int maxbe;
+		std::string status;
+	};
+
+	static std::vector<Account> accounts;
+
+	static inline auto initStorage(const std::string &path) {
+		using namespace sqlite_orm;
+		return make_storage(path,
+			make_table("Accounts",
+				make_column("Id",
+					&Account::id,
+					primary_key()),
+				make_column("username",
+					&Account::username),
+				make_column("password",
+					&Account::password),
+				make_column("region",
+					&Account::region),
+				make_column("maxlevel",
+					&Account::maxlvl),
+				make_column("maxbe",
+					&Account::maxbe),
+				make_column("status",
+					&Account::status)));
+	}
+
+
+	typedef decltype(initStorage("")) Storage;
+	static std::shared_ptr<Storage> database;
 
 	static void checkUpdate(voli::LeagueInstance& c) {
 		auto state = lol::GetPatcherV1ProductsByProductIdState(c, "league_of_legends");

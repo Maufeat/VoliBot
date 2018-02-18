@@ -2,50 +2,6 @@
 #include "BotEvents.hpp"
 #include "InstanceManager.hpp"
 #include "VoliServer.hpp"
-#include "../sqlite/sqlite_orm.h"
-
-#include <lol/def/PluginManagerResource.hpp>
-#include <lol/def/LolHonorV2Ballot.hpp>
-#include <lol/def/LolChampSelectChampSelectSession.hpp>
-#include <lol/def/LolSummonerSummoner.hpp>
-#include <lol/def/LolEndOfGameEndOfGameStats.hpp>
-#include <lol/def/LolPreEndOfGameSequenceEvent.hpp>
-#include <lol/def/LolGameflowGameflowSession.hpp>
-#include <lol/def/LeaverBusterNotificationResource.hpp>
-#include <lol/def/LolMatchmakingMatchmakingSearchErrorResource.hpp>
-
-#include <lol/op/AsyncStatus.hpp>
-#include <lol/op/PostLolLoginV1Session.hpp>
-#include <lol/op/PostLolLobbyV2Lobby.hpp>
-#include <lol/op/PostLolLobbyV2LobbyMatchmakingSearch.hpp>
-#include <lol/op/PostLolMatchmakingV1ReadyCheckAccept.hpp>
-#include <lol/op/PostLolHonorV2V1HonorPlayer.hpp>
-#include <lol/op/PostLolLobbyV2PlayAgain.hpp>
-#include <lol/op/PostLolSummonerV1Summoners.hpp>
-#include <lol/op/GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId.hpp>
-#include <lol/op/PostPatcherV1ProductsByProductIdStartPatchingRequest.hpp>
-#include <lol/op/GetLolMatchmakingV1Search.hpp>
-#include <lol/op/GetLolLobbyV2Lobby.hpp>
-#include <lol/op/GetLolLoginV1Wallet.hpp>
-#include <lol/op/GetLolSummonerV1CurrentSummoner.hpp>
-#include <lol/op/GetLolChampSelectV1PickableChampions.hpp>
-#include <lol/op/PutLolSummonerV1CurrentSummonerIcon.hpp>
-#include <lol/op/PostLolLoginV1NewPlayerFlowCompleted.hpp>
-#include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
-#include <lol/op/PostLolChampSelectV1SessionActionsByIdComplete.hpp>
-#include <lol/op/PostLolGameflowV1Reconnect.hpp>
-#include <lol/op/GetLolEndOfGameV1EogStatsBlock.hpp>
-#include <lol/op/PostLolGameflowV1PreEndGameTransition.hpp>
-#include <lol/op/PatchLolChampSelectV1SessionActionsById.hpp>
-#include <lol/op/GetPatcherV1ProductsByProductIdState.hpp>
-#include <lol/op/GetRiotclientGetRegionLocale.hpp>
-#include <lol/op/PostProcessControlV1ProcessQuit.hpp>
-#include <lol/op/PostRiotclientSetRegionLocale.hpp>
-#include <lol/op/PostLolPreEndOfGameV1CompleteBySequenceEventName.hpp>
-#include <lol/op/PostLolMissionsV1MissionsUpdate.hpp>
-#include <lol/op/GetLolLeaverBusterV1Notifications.hpp>
-#include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
-#include <lol/op/GetLolMatchmakingV1SearchErrors.hpp>
 
 #include "common.hpp"
 
@@ -59,10 +15,25 @@ int main()
 
 	voli::manager = new InstanceManager(service);
 	voli::server = new VoliServer(service, 8000);
+	voli::database = std::make_shared<Storage>(voli::initStorage("accounts.sqlite"));
+	voli::database->sync_schema();
 
-	auto storage = sqlite_orm::make_storage("accounts.sqlite");
-	storage.sync_schema();
-	std::cout << storage.libversion() << std::endl;
+	// GET ACCOUNTS
+	/*
+	voli::accounts = voli::database->get_all<Account>();
+	cout << "allUsers (" << voli::accounts.size() << "):" << endl;
+	for (auto &user : voli::accounts) {
+		cout << voli::database->dump(user) << endl; //  dump returns std::string with json-like style object info. For example: { id : '1', first_name : 'Jonh', last_name : 'Doe', birth_date : '664416000', image_url : 'https://cdn1.iconfinder.com/data/icons/man-icon-set/100/man_icon-21-512.png', type_id : '3' }
+	}*/
+
+	// INSERT ACCOUNT
+	/*
+	Account user{ -1, "Jonh", "Doe", "EUW", 30, 30000, "new" };
+
+	auto insertedId = voli::database->insert(user);
+	cout << "insertedId = " << insertedId << endl;      //  insertedId = 8
+	user.id = insertedId;
+	*/
 
 	voli::manager->onevent = {
 		// { ".*", voli::OnDebugPrint },
