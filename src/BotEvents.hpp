@@ -1,9 +1,5 @@
 #pragma once
 
-#include "InstanceManager.hpp"
-#include "VoliServer.hpp"
-#include "../sqlite/sqlite_orm.h"
-
 #include <lol/def/PluginManagerResource.hpp>
 #include <lol/def/LolHonorV2Ballot.hpp>
 #include <lol/def/LolChampSelectChampSelectSession.hpp>
@@ -47,6 +43,10 @@
 #include <lol/op/GetLolLeaverBusterV1Notifications.hpp>
 #include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
 #include <lol/op/GetLolMatchmakingV1SearchErrors.hpp>
+
+#include "InstanceManager.hpp"
+#include "VoliServer.hpp"
+#include "../sqlite/sqlite_orm.h"
 
 namespace voli {
 
