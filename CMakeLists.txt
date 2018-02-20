@@ -10,6 +10,8 @@ add_subdirectory(LeagueAPI)
 add_subdirectory(sqlite)
 include_directories("${PROJECT_SOURCE_DIR}/sqlite")
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+
 add_executable(VoliBot 
 src/main.cpp 
 src/common.hpp
