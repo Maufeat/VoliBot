@@ -44,17 +44,12 @@
 #include <lol/op/DeleteLolLeaverBusterV1NotificationsById.hpp>
 #include <lol/op/GetLolMatchmakingV1SearchErrors.hpp>
 
-<<<<<<< HEAD
 #include "InstanceManager.hpp"
 #include "VoliServer.hpp"
 #include "../sqlite/sqlite_orm.h"
 
-=======
-#include "../sqlite/sqlite_orm.h"
-
 using namespace sqlite_orm;
 
->>>>>>> 1c9a9107ce07dfd3aaebb22388cb250d2a899f12
 namespace voli {
 
 	static voli::VoliServer *server;
