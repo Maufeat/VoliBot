@@ -6,7 +6,6 @@
 #include <memory>
 #include <random>
 
-
 #include <cstdlib>
 #include <iomanip>
 #include <rang.hpp>
@@ -20,6 +19,7 @@
 #else
 #error Unknown Platform
 #endif
+
 
 #if defined(OS_LINUX) || defined(OS_MAC)
 #include <unistd.h>
@@ -36,34 +36,40 @@ namespace voli {
 	using IoServicePtr = std::shared_ptr<IoService>;
 
 
+	struct Account {
+		uint32_t id;
+		std::string username;
+		std::string password;
+		std::string region;
+		int queueId;
+		int maxlvl;
+		int maxbe;
+		int status;
+	};
 
 	class LeagueInstance {
 	public:
-		std::string lolUsername;
-		std::string lolPassword;
-		std::string lolRegion;
+		voli::Account account;
 		std::string currentStatus;
-		int queue;
-		bool autoplay;
-        std::string auth;
-        lol::WssClient wss;
-        lol::HttpsClient https;
-        lol::HttpsClient httpsa;
-        uint32_t id;
-        json trashbin;
+		std::string auth;
+		lol::WssClient wss;
+		lol::HttpsClient https;
+		lol::HttpsClient httpsa;
+		uint32_t id;
+		nlohmann::json trashbin;
 
-        LeagueInstance(const LeagueInstance&) = delete;
-        LeagueInstance(const std::string& address, int port, const std::string& password, uint32_t id = 0) :
-            auth("Basic " + SimpleWeb::Crypto::Base64::encode("riot:" + password)),
-            wss(address + ":" + std::to_string(port), false),
-            https(address + ":" + std::to_string(port), false),
-            httpsa(address + ":" + std::to_string(port), false)
-        {
-            wss.config.header = {
-                { "authorization", auth },
-                { "sec-websocket-protocol", "wamp" }
-            };
-        }
+		LeagueInstance(const LeagueInstance&) = delete;
+		LeagueInstance(const std::string& address, int port, const std::string& password, uint32_t id = 0) :
+			auth("Basic " + SimpleWeb::Crypto::Base64::encode("riot:" + password)),
+			wss(address + ":" + std::to_string(port), false),
+			https(address + ":" + std::to_string(port), false),
+			httpsa(address + ":" + std::to_string(port), false)
+		{
+			wss.config.header = {
+				{ "authorization", auth },
+				{ "sec-websocket-protocol", "wamp" }
+			};
+		}
 	};
 
 

@@ -59,17 +59,14 @@ InstanceManager::InstanceManager(IoServicePtr service) : mService(service) {
 
 }
 
-void InstanceManager::Start(std::string lolUsername, std::string lolPassword, std::string region, int queue, bool autoplay = false) {
+void InstanceManager::Start(voli::Account user) {
   int port = freePort();
   std::string password = random_string(21);
   auto x = launchWithArgs("D:/Riot Games/League of Legends/", "--allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
   if (x != 0) {
 	  std::shared_ptr<voli::LeagueInstance> client = std::make_shared<voli::LeagueInstance>("127.0.0.1", port, password);
-	  client->lolUsername = lolUsername;
-	  client->lolPassword = lolPassword;
-	  client->lolRegion = region;
-	  client->queue = queue;
-	  client->autoplay = autoplay;
+	  client->id = user.id;
+	  client->account = user;
 	  Add(client);
   }
   else
@@ -78,9 +75,8 @@ void InstanceManager::Start(std::string lolUsername, std::string lolPassword, st
 
 
 void InstanceManager::Add(std::shared_ptr<voli::LeagueInstance> client) {
-  uint32_t curId = client->id = ++nextId;
   std::weak_ptr<voli::LeagueInstance> ptr = client;
-  mClients[curId] = client;
+  mClients[client->account.id] = client;
   client->wss.on_error = [ptr](auto c, const SimpleWeb::error_code &e) {
     if (auto spt = ptr.lock()) {
       if (e.value() == 10061)
@@ -88,6 +84,7 @@ void InstanceManager::Add(std::shared_ptr<voli::LeagueInstance> client) {
         std::cout << "Waiting for LeagueClient to be started." << std::endl;
         spt->wss.start();
       }
+	  else if(e.value() == 10009) {}
       else
         std::cout << "Client: Error: " + std::to_string(e.value()) + " | error message: " + e.message() << std::endl;
     }

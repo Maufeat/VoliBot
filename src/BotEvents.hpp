@@ -55,16 +55,6 @@ namespace voli {
 	static voli::VoliServer *server;
 	static voli::InstanceManager *manager;
 
-	struct Account {
-		int id;
-		std::string username;
-		std::string password;
-		std::string region;
-		int maxlvl;
-		int maxbe;
-		std::string status;
-	};
-
 	static std::vector<Account> accounts;
 
 	static inline auto initStorage(const std::string &path) {
@@ -74,17 +64,19 @@ namespace voli {
 				make_column("Id",
 					&Account::id,
 					primary_key()),
-				make_column("username",
+				make_column("Username",
 					&Account::username),
-				make_column("password",
+				make_column("Password",
 					&Account::password),
-				make_column("region",
+				make_column("Region",
 					&Account::region),
-				make_column("maxlevel",
+				make_column("QueueId",
+					&Account::region),
+				make_column("MaxLevel",
 					&Account::maxlvl),
-				make_column("maxbe",
+				make_column("MaxBE",
 					&Account::maxbe),
-				make_column("status",
+				make_column("Status",
 					&Account::status)));
 	}
 
@@ -116,9 +108,9 @@ namespace voli {
 	static void checkRegion(voli::LeagueInstance& c) {
 		auto payload = lol::GetRiotclientGetRegionLocale(c);
 		if (payload) {
-			if (c.lolRegion != payload.data->region) {
-				voli::print(c.lolUsername, "Region change from " + payload.data->region + " to " + c.lolRegion + " requested.");
-				lol::PostRiotclientSetRegionLocale(c, c.lolRegion, payload.data->locale);
+			if (c.account.region != payload.data->region) {
+				voli::print(c.account.username, "Region change from " + payload.data->region + " to " + c.account.region + " requested.");
+				lol::PostRiotclientSetRegionLocale(c, c.account.region, payload.data->locale);
 			}
 		}
 	}
@@ -185,7 +177,7 @@ namespace voli {
 		client.currentStatus = status;
 		auto x = lol::GetLolSummonerV1CurrentSummoner(client);
 		auto y = lol::GetLolLoginV1Wallet(client);
-		json settings = { { "autoPlay", client.autoplay },{ "queue", client.queue } };
+		json settings = { { "autoPlay", client.account.status },{ "queue", client.account.queueId } };
 		server.broadcast(UpdateStatus{ client.id, status, x.data, y.data, settings });
 	}
 
@@ -194,7 +186,7 @@ namespace voli {
 	}
 
 	static void OnDebugPrint(voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const nlohmann::json& data) {
-		voli::print(c.lolUsername, m.str());
+		voli::print(c.account.username, m.str());
 		notifyUpdateStatus(m.str(), c, *voli::server);
 	}
 
@@ -209,13 +201,13 @@ namespace voli {
 			checkRegion(c);
 			checkUpdate(c);
 			lol::LolLoginUsernameAndPassword uap;
-			uap.password = c.lolPassword;
-			uap.username = c.lolUsername;
+			uap.password = c.account.password;
+			uap.username = c.account.username;
 			auto res = lol::PostLolLoginV1Session(c, uap);
 			if (res) {
 				if (res.data->error) {
 					if (res.data->error->messageId == "INVALID_CREDENTIALS") {
-						voli::print(c.lolUsername, "Wrong credentials.");
+						voli::print(c.account.username, "Wrong credentials.");
 						c.wss.stop();
 					}
 				}
@@ -227,7 +219,7 @@ namespace voli {
 		for (auto const& error : data) {
 			if (error.penaltyTimeRemaining <= 1 && data.size() == 1) {
 				std::this_thread::sleep_for(std::chrono::seconds(1));
-				voli::print(c.lolUsername, "Joining queue.");
+				voli::print(c.account.username, "Joining queue.");
 				lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 			}
 			//voli::print(c.lolUsername, error.message + " | " + to_string(error.penaltyTimeRemaining) + " | " + to_string(t));
@@ -288,29 +280,29 @@ namespace voli {
 			case lol::LolGameflowGameflowPhase::WaitingForStats_e:
 			{
 				notifyUpdateStatus("Waiting for Stats", c, *voli::server);
-				voli::print(c.lolUsername, "Waiting for Stats. (End of Game)");
+				voli::print(c.account.username, "Waiting for Stats. (End of Game)");
 				lol::PostLolGameflowV1PreEndGameTransition(c, true);
 				auto eog = lol::GetLolEndOfGameV1EogStatsBlock(c);
 				if (eog.data) {
 					lol::LolEndOfGameEndOfGameStats eogStats = *eog.data;
 					notifyUpdateStatus("Finished game (+ " + std::to_string(eogStats.experienceEarned) + " EXP)", c, *voli::server);
-					voli::print(c.lolUsername, "Finished game. (+ " + std::to_string(eogStats.experienceEarned) + " EXP)");
+					voli::print(c.account.username, "Finished game. (+ " + std::to_string(eogStats.experienceEarned) + " EXP)");
 					auto playAgain = lol::PostLolLobbyV2PlayAgain(c);
-					if (playAgain && c.autoplay) {
+					if (playAgain && c.account.status == 1) {
 						auto lobby = lol::GetLolLobbyV2Lobby(c);
 						if (lobby.data->canStartActivity == true) {
 							if (lobby.data->gameConfig.queueId == 450)
-								voli::print(c.lolUsername, "Joining ARAM Queue.");
+								voli::print(c.account.username, "Joining ARAM Queue.");
 							else {
 								if (eogStats.currentLevel < 6)
-									voli::print(c.lolUsername, "Joining COOP Queue.");
+									voli::print(c.account.username, "Joining COOP Queue.");
 								else {
 									auto &lobbyConfig = lol::LolLobbyLobbyChangeGameDto();
 									lobbyConfig.queueId = 450;
 									auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
 									if (res)
 										if (res.data->canStartActivity == true)
-											voli::print(c.lolUsername, "Changed now to ARAM Queue.");
+											voli::print(c.account.username, "Changed now to ARAM Queue.");
 								}
 							}
 							lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
@@ -321,16 +313,16 @@ namespace voli {
 			}
 			case lol::LolGameflowGameflowPhase::GameStart_e:
 				notifyUpdateStatus("Starting League of Legends.", c, *voli::server);
-				voli::print(c.lolUsername, "Starting League of Legends.");
+				voli::print(c.account.username, "Starting League of Legends.");
 				break;
 			case lol::LolGameflowGameflowPhase::Reconnect_e:
 				notifyUpdateStatus("Reconnecting...", c, *voli::server);
-				voli::print(c.lolUsername, "Client probably crashed. Reconnecting...");
+				voli::print(c.account.username, "Client probably crashed. Reconnecting...");
 				lol::PostLolGameflowV1Reconnect(c);
 				break;
 			case lol::LolGameflowGameflowPhase::FailedToLaunch_e:
 				notifyUpdateStatus("Reconnecting...", c, *voli::server);
-				voli::print(c.lolUsername, "Failed to Launch. Reconnecting...");
+				voli::print(c.account.username, "Failed to Launch. Reconnecting...");
 				lol::PostLolGameflowV1Reconnect(c);
 				break;
 			case lol::LolGameflowGameflowPhase::InProgress_e:
@@ -360,8 +352,8 @@ namespace voli {
 				for (auto const& player : champSelectSession.myTeam) {
 					if (player.cellId == champSelectSession.localPlayerCellId && player.championId > 0) {
 						auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, player.summonerId, player.championId);
-						voli::print(c.lolUsername, "In Champion Selection");
-						voli::print(c.lolUsername, "We've got: " + championInfos.data->name);
+						voli::print(c.account.username, "In Champion Selection");
+						voli::print(c.account.username, "We've got: " + championInfos.data->name);
 						notifyUpdateStatus("We've got: " + championInfos.data->name, c, *voli::server);
 						notifyUpdateStatus("Champion Selection", c, *voli::server);
 					}
@@ -376,8 +368,8 @@ namespace voli {
 								auto randomId = pickable->championIds[random_number(pickable->championIds.size() - 1)];
 								lol::LolSummonerSummoner summonerInfo = c.trashbin["currentSummoner"];
 								auto championInfos = lol::GetLolChampionsV1InventoriesBySummonerIdChampionsByChampionId(c, summonerInfo.summonerId, randomId);
-								voli::print(c.lolUsername, "In Champion Selection");
-								voli::print(c.lolUsername, "We are picking: " + championInfos->name);
+								voli::print(c.account.username, "In Champion Selection");
+								voli::print(c.account.username, "We are picking: " + championInfos->name);
 								notifyUpdateStatus("We are picking: " + championInfos.data->name, c, *voli::server);
 								notifyUpdateStatus("Champion Selection", c, *voli::server);
 								lol::LolChampSelectChampSelectAction csAction;
@@ -390,8 +382,8 @@ namespace voli {
 								lol::PostLolChampSelectV1SessionActionsByIdComplete(c, csAction.id);
 							}
 							else if (aaction.at("type").get<std::string>() == "ban") {
-								voli::print(c.lolUsername, "In Champion Selection");
-								voli::print(c.lolUsername, "We have to ban.");
+								voli::print(c.account.username, "In Champion Selection");
+								voli::print(c.account.username, "We have to ban.");
 							}
 						}
 					}
@@ -421,7 +413,7 @@ namespace voli {
 			int rndInt = random_number(2);
 			auto rndCat = aCats[rndInt];
 			honorRequest.honorCategory = rndCat;
-			voli::print(c.lolUsername, "We are honoring: " + randomPlayer.skinName + " with " + capitalize(rndCat));
+			voli::print(c.account.username, "We are honoring: " + randomPlayer.skinName + " with " + capitalize(rndCat));
 			lol::PostLolHonorV2V1HonorPlayer(c, honorRequest);
 			break;
 		}
@@ -439,11 +431,11 @@ namespace voli {
 			lol::LolMatchmakingMatchmakingReadyCheckResource readyCheckResource = data;
 			switch (readyCheckResource.state) {
 			case lol::LolMatchmakingMatchmakingReadyCheckState::StrangerNotReady_e:
-				voli::print(c.lolUsername, "Someone has declined.");
+				voli::print(c.account.username, "Someone has declined.");
 				break;
 			case lol::LolMatchmakingMatchmakingReadyCheckState::InProgress_e:
 				if (readyCheckResource.playerResponse == lol::LolMatchmakingMatchmakingReadyCheckResponse::None_e)
-					voli::print(c.lolUsername, "Ready Check accepted.");
+					voli::print(c.account.username, "Ready Check accepted.");
 				auto res = lol::PostLolMatchmakingV1ReadyCheckAccept(c);
 				break;
 			}
@@ -477,13 +469,13 @@ namespace voli {
 				if (searchResource.lowPriorityData.penaltyTimeRemaining != 0) {
 					c.trashbin["penalty"] = searchResource;
 					notifyUpdateStatus("Couldn't queue. Remaining Penalty: " + std::to_string((int)searchResource.lowPriorityData.penaltyTimeRemaining) + "s", c, *voli::server);
-					voli::print(c.lolUsername, "Couldn't queue. Remaining Penalty: " + std::to_string((int)searchResource.lowPriorityData.penaltyTimeRemaining) + "s");
+					voli::print(c.account.username, "Couldn't queue. Remaining Penalty: " + std::to_string((int)searchResource.lowPriorityData.penaltyTimeRemaining) + "s");
 					break;
 				}
 				else {
 					c.trashbin["searchQueue"] = searchResource;
 					notifyUpdateStatus("In Queue (" + std::to_string((int)searchResource.estimatedQueueTime) + "s)", c, *voli::server);
-					voli::print(c.lolUsername, "In Queue (Estimated Queue Time: " + std::to_string((int)searchResource.estimatedQueueTime) + "s)");
+					voli::print(c.account.username, "In Queue (Estimated Queue Time: " + std::to_string((int)searchResource.estimatedQueueTime) + "s)");
 				}
 				break;
 			}
@@ -528,20 +520,20 @@ namespace voli {
 							break;
 					c.trashbin["queuePos"] = loginSession.queueStatus;
 					notifyUpdateStatus("Logging in. (" + std::to_string(loginSession.queueStatus->estimatedPositionInQueue) + " | " + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)", c, *voli::server);
-					voli::print(c.lolUsername, "Logging in. (Queue Position: " + std::to_string(loginSession.queueStatus->estimatedPositionInQueue) + " - " + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)");
+					voli::print(c.account.username, "Logging in. (Queue Position: " + std::to_string(loginSession.queueStatus->estimatedPositionInQueue) + " - " + *lol::to_string(loginSession.queueStatus->approximateWaitTimeSeconds) + "s)");
 				}
 				break;
 			}
 			case lol::LolLoginLoginSessionStates::SUCCEEDED_e:
 				if (loginSession.connected) {
-					voli::print(c.lolUsername, "Successfully logged in.");
+					voli::print(c.account.username, "Successfully logged in.");
 					notifyUpdateStatus("Logged in.", c, *voli::server);
 					if (loginSession.isNewPlayer) {
 						lol::LolSummonerSummonerRequestedName name;
-						name.name = capitalize(c.lolUsername);
+						name.name = capitalize(c.account.username);
 						auto res = lol::PostLolSummonerV1Summoners(c, name);
 						if (!res.error)
-							voli::print(c.lolUsername, "Summoner: " + name.name + " has been created.");
+							voli::print(c.account.username, "Summoner: " + name.name + " has been created.");
 						else {
 							name.name = name.name + std::to_string(random_number(1));
 							lol::PostLolSummonerV1Summoners(c, name);
@@ -559,22 +551,22 @@ namespace voli {
 					else
 						lobbyConfig.queueId = 450;
 					auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
-					if (res && c.autoplay) {
+					if (res && c.account.status == 1) {
 						if (res.data->canStartActivity == true) {
 							if (lobbyConfig.queueId == 450) {
 								notifyUpdateStatus("Joining ARAM Queue.", c, *voli::server);
-								voli::print(c.lolUsername, "Joining ARAM Queue.");
+								voli::print(c.account.username, "Joining ARAM Queue.");
 							}
 							else if (lobbyConfig.queueId == 830) {
 								notifyUpdateStatus("Joining COOP Queue.", c, *voli::server);
-								voli::print(c.lolUsername, "Joining COOP Queue.");
+								voli::print(c.account.username, "Joining COOP Queue.");
 							}
 							auto queue = lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
 							if (queue.error->errorCode == "GATEKEEPER_RESTRICTED") {
-								voli::print(c.lolUsername, queue.error->message);
+								voli::print(c.account.username, queue.error->message);
 								for (auto const& error : queue.error->payload) {
 									notifyUpdateStatus("Waiting to Queue (" + std::to_string((error.at("remainingMillis").get<int>() / 1000)) + "s)", c, *voli::server);
-									voli::print(c.lolUsername, "Time until cleared: " + std::to_string((error.at("remainingMillis").get<int>() / 1000)) + "s");
+									voli::print(c.account.username, "Time until cleared: " + std::to_string((error.at("remainingMillis").get<int>() / 1000)) + "s");
 								}
 							}
 						}
@@ -582,66 +574,13 @@ namespace voli {
 				}
 				break;
 			case lol::LolLoginLoginSessionStates::LOGGING_OUT_e:
-				voli::print(c.lolUsername, "Logging out.");
+				voli::print(c.account.username, "Logging out.");
+				auto y = lol::PostProcessControlV1ProcessQuit(c);
 				c.wss.stop();
 				break;
 			}
 			break;
 		}
-	}
-
-	static std::string OnRequestInstanceList(nlohmann::json data) {
-		auto x = voli::manager->GetAll();
-		json message;
-		for (auto const& lol : x) {
-			json settings = { { "autoPlay", lol.second->autoplay },{ "queue", lol.second->queue } };
-			message[lol.second->id] = { { "id", lol.second->id },{ "status", lol.second->currentStatus },{ "summoner", lol.second->trashbin["currentSummoner"] },{ "wallet", lol.second->trashbin["wallet"] },{ "settings", settings } };
-		}
-		voli::server->broadcast(ListInstance{ message });
-		return std::string("success");
-	}
-
-	static std::string OnRequestInstanceStart(nlohmann::json data) {
-		std::string username = data.at("username").get<std::string>();
-		std::string password = data.at("password").get<std::string>();
-		std::string region = data.at("region").get<std::string>();
-		int queue = data.at("queue").get<int>();
-		bool autoplay = data.at("autoplay").get<bool>();
-		voli::printSystem("Adding new Account (" + username + ") at " + region);
-		voli::manager->Start(username, password, region, queue, autoplay);
-		return std::string("success");
-	}
-
-	static std::string OnRequestInstanceLogout(nlohmann::json data) {
-		int id = data.at("id").get<int>();
-		auto x = voli::manager->Get(id);
-		if (x) {
-			auto y = lol::PostProcessControlV1ProcessQuit(*x);
-			if (y) {
-				voli::server->broadcast(LoggingOut{ x->id });
-				voli::print(x->lolUsername, "Logging out.");
-				voli::printSystem("Removing Account (" + x->lolUsername + ")");
-				voli::manager->remove(id);
-				return std::string("success");
-			}
-			return std::string("failed");
-		}
-		return std::string("failed");
-	}
-	
-	static std::string OnRequestChangeSettings(nlohmann::json data) {
-		int id = data.at("id").get<int>();
-		return std::string("success");
-	}
-
-	static std::string OnRequestChangeAutoPlay(nlohmann::json data) {
-		int id = data.at("id").get<int>();
-		bool autoPlay = data.at("autoPlay").get<bool>();
-		auto x = voli::manager->Get(id);
-		if (x) {
-			x->autoplay = true;
-		}
-		return std::string("success");
 	}
 	
 }
