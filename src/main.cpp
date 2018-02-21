@@ -14,12 +14,13 @@ int main()
 	print_header();
 	auto service = make_shared<IoService>();
 
-	voli::manager = new InstanceManager(service);
+	voli::settings = new voli::Config("config.ini");
+
+	voli::manager = new InstanceManager(service, voli::settings);
 	voli::server = new VoliServer(service, 8000);
 	voli::database = std::make_shared<Storage>(voli::initStorage("accounts.sqlite"));
 	voli::database->sync_schema();
 
-	// GET ACCOUNTS
 	voli::accounts = voli::database->get_all<Account>();
 
 	int cIdle = 0, cRunning = 0, cFinished = 0;
@@ -30,7 +31,8 @@ int main()
 			break;
 		case 1:
 			cRunning++;
-			voli::manager->Start(account);
+			if(voli::settings->AutoRunOnStart)
+				voli::manager->Start(account);
 			break;
 		case 2:
 			cFinished++;
@@ -38,8 +40,8 @@ int main()
 		}
 	}
 
-	voli::printSystem("Accounts loaded: " + to_string(voli::accounts.size()) + " | Idle: " + to_string(cIdle) + " Running: " + to_string(cRunning) + " Finished: " + to_string(cFinished));
-	if(cRunning > 0)
+	voli::printSystem("Accounts loaded: " + to_string(voli::accounts.size()) + " | Idle: " + to_string(cIdle) + " - Running: " + to_string(cRunning) + " - Finished: " + to_string(cFinished));
+	if(cRunning > 0 && voli::settings->AutoRunOnStart)
 		voli::printSystem("Auto starting all " + to_string(cRunning) + " Accounts with \"Running\"-State.");
 
 	voli::manager->onevent = {
@@ -83,7 +85,7 @@ int main()
 		bool autoplay = data.at("autoplay").get<bool>();
 
 		int autoPlay = (autoplay) ? 1 : 0;
-		Account user{ -1, username, password, region, queueId, 30, 30000, autoPlay };
+		Account user{ -1, username, password, region, queueId, voli::settings->DefaultMaxLevel, voli::settings->DefaultMaxBE, autoPlay };
 		auto insertedId = voli::database->insert(user);
 		user.id = insertedId;
 

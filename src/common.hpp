@@ -30,11 +30,33 @@
 #include <VersionHelpers.h>
 #endif
 
+#include "../sqlite/sqlite_orm.h"
+#include "INIReader.h"
+
+using namespace sqlite_orm;
+
 namespace voli {
 	using json = nlohmann::json;
 	using IoService = asio::io_service;
 	using IoServicePtr = std::shared_ptr<IoService>;
+	
+	class Config {
+	public:
+		std::string LeaguePath;
+		int DefaultMaxLevel;
+		int DefaultMaxBE;
+		bool AutoRunOnStart;
+		Config(std::string path) {
+			INIReader reader(path);
 
+			LeaguePath = reader.Get("General", "LeaguePath", "C:/Riot Games/League of Legends");
+			AutoRunOnStart = reader.GetBoolean("General", "AutoRunOnStart", false);
+			DefaultMaxLevel = reader.GetInteger("DefaultValues", "MaxLevel", 30);
+			DefaultMaxBE = reader.GetInteger("DefaultValues", "MaxBE", 30000);
+		};
+	};
+
+	static Config *settings;
 
 	struct Account {
 		uint32_t id;
@@ -46,6 +68,35 @@ namespace voli {
 		int maxbe;
 		int status;
 	};
+
+	static std::vector<Account> accounts;
+
+	static inline auto initStorage(const std::string &path) {
+		using namespace sqlite_orm;
+		return make_storage(path,
+			make_table("Accounts",
+				make_column("Id",
+					&Account::id,
+					primary_key()),
+				make_column("Username",
+					&Account::username),
+				make_column("Password",
+					&Account::password),
+				make_column("Region",
+					&Account::region),
+				make_column("QueueId",
+					&Account::region),
+				make_column("MaxLevel",
+					&Account::maxlvl),
+				make_column("MaxBE",
+					&Account::maxbe),
+				make_column("Status",
+					&Account::status)));
+	}
+
+
+	typedef decltype(initStorage("")) Storage;
+	static std::shared_ptr<Storage> database;
 
 	class LeagueInstance {
 	public:

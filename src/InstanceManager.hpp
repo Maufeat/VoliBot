@@ -14,10 +14,11 @@ namespace voli {
   private:
     uint32_t nextId = 0;
     IoServicePtr mService;
+	voli::Config *settings;
     std::unordered_map<uint32_t, std::shared_ptr<voli::LeagueInstance>> mClients;
     void Add(std::shared_ptr<voli::LeagueInstance>);
   public:
-    InstanceManager(IoServicePtr service);
+    InstanceManager(IoServicePtr service, voli::Config* settings);
     std::shared_ptr<voli::LeagueInstance> Get(uint32_t id) const;
     const std::unordered_map<uint32_t, std::shared_ptr<voli::LeagueInstance>>& GetAll() const;
     void remove(uint32_t id);

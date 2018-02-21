@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.hpp"
+
 #include <lol/def/PluginManagerResource.hpp>
 #include <lol/def/LolHonorV2Ballot.hpp>
 #include <lol/def/LolChampSelectChampSelectSession.hpp>
@@ -46,43 +48,11 @@
 
 #include "InstanceManager.hpp"
 #include "VoliServer.hpp"
-#include "../sqlite/sqlite_orm.h"
-
-using namespace sqlite_orm;
 
 namespace voli {
 
 	static voli::VoliServer *server;
 	static voli::InstanceManager *manager;
-
-	static std::vector<Account> accounts;
-
-	static inline auto initStorage(const std::string &path) {
-		using namespace sqlite_orm;
-		return make_storage(path,
-			make_table("Accounts",
-				make_column("Id",
-					&Account::id,
-					primary_key()),
-				make_column("Username",
-					&Account::username),
-				make_column("Password",
-					&Account::password),
-				make_column("Region",
-					&Account::region),
-				make_column("QueueId",
-					&Account::region),
-				make_column("MaxLevel",
-					&Account::maxlvl),
-				make_column("MaxBE",
-					&Account::maxbe),
-				make_column("Status",
-					&Account::status)));
-	}
-
-
-	typedef decltype(initStorage("")) Storage;
-	static std::shared_ptr<Storage> database;
 
 	static void checkUpdate(voli::LeagueInstance& c) {
 		auto state = lol::GetPatcherV1ProductsByProductIdState(c, "league_of_legends");
@@ -526,7 +496,7 @@ namespace voli {
 			}
 			case lol::LolLoginLoginSessionStates::SUCCEEDED_e:
 				if (loginSession.connected) {
-					voli::print(c.account.username, "Successfully logged in.");
+					voli::print(c.account.username, "Successfully logged in.\n" + voli::settings->LeaguePath);
 					notifyUpdateStatus("Logged in.", c, *voli::server);
 					if (loginSession.isNewPlayer) {
 						lol::LolSummonerSummonerRequestedName name;
