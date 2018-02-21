@@ -496,7 +496,7 @@ namespace voli {
 			}
 			case lol::LolLoginLoginSessionStates::SUCCEEDED_e:
 				if (loginSession.connected) {
-					voli::print(c.account.username, "Successfully logged in.\n" + voli::settings->LeaguePath);
+					voli::print(c.account.username, "Successfully logged in.");
 					notifyUpdateStatus("Logged in.", c, *voli::server);
 					if (loginSession.isNewPlayer) {
 						lol::LolSummonerSummonerRequestedName name;

@@ -62,7 +62,8 @@ InstanceManager::InstanceManager(IoServicePtr service, Config* settings) : mServ
 void InstanceManager::Start(voli::Account user) {
   int port = freePort();
   std::string password = random_string(21);
-  auto x = launchWithArgs(settings->LeaguePath, "--allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
+  std::string headless = (settings->Headless) ? "--headless" : "";
+  auto x = launchWithArgs(settings->LeaguePath, headless + " --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
   if (x != 0) {
 	  std::shared_ptr<voli::LeagueInstance> client = std::make_shared<voli::LeagueInstance>("127.0.0.1", port, password);
 	  client->id = user.id;

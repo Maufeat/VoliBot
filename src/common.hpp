@@ -46,6 +46,7 @@ namespace voli {
 		int DefaultMaxLevel;
 		int DefaultMaxBE;
 		bool AutoRunOnStart;
+		bool Headless;
 		Config(std::string path) {
 			INIReader reader(path);
 
@@ -53,6 +54,7 @@ namespace voli {
 			AutoRunOnStart = reader.GetBoolean("General", "AutoRunOnStart", false);
 			DefaultMaxLevel = reader.GetInteger("DefaultValues", "MaxLevel", 30);
 			DefaultMaxBE = reader.GetInteger("DefaultValues", "MaxBE", 30000);
+			Headless = reader.GetBoolean("Debug", "Headless", true);
 		};
 	};
 
