@@ -85,11 +85,11 @@ int main()
 		bool autoplay = data.at("autoplay").get<bool>();
 
 		int autoPlay = (autoplay) ? 1 : 0;
-		Account user{ -1, username, password, region, queueId, voli::settings->DefaultMaxLevel, voli::settings->DefaultMaxBE, autoPlay };
+		Account user{ -1, username, password, region, queueId, voli::settings->DefaultTargetLevel, voli::settings->DefaultTargetBE, autoPlay };
 		auto insertedId = voli::database->insert(user);
 		user.id = insertedId;
 
-		voli::printSystem("Adding new Account (" + user.username + ") atx " + user.region);
+		voli::printSystem("Adding new Account (" + user.username + ") at " + user.region);
 		voli::server->broadcast(UpdateStatus{ user.id , "Logged out" });
 
 		voli::accounts.push_back(user);

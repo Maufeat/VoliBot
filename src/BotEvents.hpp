@@ -155,6 +155,23 @@ namespace voli {
 		server.broadcast(UpdatePhase{ client.id, phase });
 	}
 
+	static void switchAccount(voli::LeagueInstance& client) {
+		// Set status to finished;
+		client.account.status = 2;
+		// Update entry in database;
+		voli::database->update(client.account);
+		// Update Accounts vector;
+		for (auto& account : voli::accounts) {
+			if (account.id == client.id) {
+				account.status = 2;
+				break;
+			}
+		}
+		// Logout request;
+		lol::PostProcessControlV1ProcessQuit(client);
+		// Update 
+	}
+
 	static void OnDebugPrint(voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const nlohmann::json& data) {
 		voli::print(c.account.username, m.str());
 		notifyUpdateStatus(m.str(), c, *voli::server);
@@ -239,6 +256,8 @@ namespace voli {
 	}
 
 	static void OnGameFlowSession(voli::LeagueInstance& c, const std::smatch& m, lol::PluginResourceEventType t, const nlohmann::json& data) {
+		if (data.at("phase").get<std::string>() == "None")
+			return;
 		switch (t) {
 		case lol::PluginResourceEventType::Update_e:
 		case lol::PluginResourceEventType::Create_e:
@@ -268,11 +287,11 @@ namespace voli {
 									voli::print(c.account.username, "Joining COOP Queue.");
 								else {
 									auto &lobbyConfig = lol::LolLobbyLobbyChangeGameDto();
-									lobbyConfig.queueId = 450;
+									lobbyConfig.queueId = c.account.queueId;
 									auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
 									if (res)
 										if (res.data->canStartActivity == true)
-											voli::print(c.account.username, "Changed now to ARAM Queue.");
+											voli::print(c.account.username, "Changed now to " + std::to_string(c.account.queueId) + " QueueID.");
 								}
 							}
 							lol::PostLolLobbyV2LobbyMatchmakingSearch(c);
@@ -519,7 +538,7 @@ namespace voli {
 					if (currentSummoner->summonerLevel < 6)
 						lobbyConfig.queueId = 830;
 					else
-						lobbyConfig.queueId = 450;
+						lobbyConfig.queueId = c.account.queueId;
 					auto res = lol::PostLolLobbyV2Lobby(c, lobbyConfig);
 					if (res && c.account.status == 1) {
 						if (res.data->canStartActivity == true) {
@@ -529,6 +548,10 @@ namespace voli {
 							}
 							else if (lobbyConfig.queueId == 830) {
 								notifyUpdateStatus("Joining COOP Queue.", c, *voli::server);
+								voli::print(c.account.username, "Joining COOP Queue.");
+							}
+							else {
+								notifyUpdateStatus("Joining " + std::to_string(c.account.queueId) + " Queue.", c, *voli::server);
 								voli::print(c.account.username, "Joining COOP Queue.");
 							}
 							auto queue = lol::PostLolLobbyV2LobbyMatchmakingSearch(c);

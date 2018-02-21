@@ -39,21 +39,23 @@ namespace voli {
 	using json = nlohmann::json;
 	using IoService = asio::io_service;
 	using IoServicePtr = std::shared_ptr<IoService>;
-	
+
 	class Config {
 	public:
 		std::string LeaguePath;
-		int DefaultMaxLevel;
-		int DefaultMaxBE;
+		int DefaultTargetLevel;
+		int DefaultTargetBE;
 		bool AutoRunOnStart;
 		bool Headless;
+		int MaxSessions;
+		int CurSessions;
 		Config(std::string path) {
 			INIReader reader(path);
 
 			LeaguePath = reader.Get("General", "LeaguePath", "C:/Riot Games/League of Legends");
 			AutoRunOnStart = reader.GetBoolean("General", "AutoRunOnStart", false);
-			DefaultMaxLevel = reader.GetInteger("DefaultValues", "MaxLevel", 30);
-			DefaultMaxBE = reader.GetInteger("DefaultValues", "MaxBE", 30000);
+			DefaultTargetLevel = reader.GetInteger("DefaultValues", "TargetLevel", 30);
+			DefaultTargetBE = reader.GetInteger("DefaultValues", "TargetBE", 30000);
 			Headless = reader.GetBoolean("Debug", "Headless", true);
 		};
 	};
@@ -143,7 +145,8 @@ namespace voli {
 #elif defined(OS_WIN)
 		CONSOLE_SCREEN_BUFFER_INFO csbi;
 		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-		SetConsoleTitle("VoliBot - Title");
+		std::string title = "VoliBot - Current Session: 0";
+		SetConsoleTitle(title.c_str());
 		columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 #endif
 

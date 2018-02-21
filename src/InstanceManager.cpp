@@ -69,6 +69,11 @@ void InstanceManager::Start(voli::Account user) {
 	  client->id = user.id;
 	  client->account = user;
 	  Add(client);
+	  settings->CurSessions = settings->CurSessions + 1;
+#if defined(OS_WIN)
+	  std::string title = "VoliBot - Current Session: " + std::to_string(settings->CurSessions);
+	  SetConsoleTitle(title.c_str());
+#endif
   }
   else
 	  voli::printSystem("No League found. Please check your League of Legends Path in Settings.");
