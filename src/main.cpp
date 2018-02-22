@@ -69,7 +69,7 @@ int main()
 		}
 		// Replace Accounts that are running with current states.
 		for (auto const& lol : voli::manager->GetAll()) {
-			json settings = { { "autoPlay", lol.second->account.status },{ "queue", lol.second->account.queueId } };
+			json settings = { { "autoPlay", lol.second->account.status },{ "queue", lol.second->account.queueId }, { "region", lol.second->account.region }, { "targetLevel", lol.second->account.maxlvl }, { "targetBE", lol.second->account.maxbe } };
 			message[lol.second->id] = { { "id", lol.second->id },{ "status", lol.second->currentStatus },{ "summoner", lol.second->trashbin["currentSummoner"] },{ "wallet", lol.second->trashbin["wallet"] },{ "settings", settings } };
 		}
 		voli::server->broadcast(ListInstance{ message });
@@ -83,9 +83,11 @@ int main()
 		std::string region = data.at("region").get<std::string>();
 		int queueId = data.at("queue").get<int>();
 		bool autoplay = data.at("autoplay").get<bool>();
+		int targetLevel = data.at("targetlevel").get<int>();
+		int targetBE = data.at("targetbe").get<int>();
 
 		int autoPlay = (autoplay) ? 1 : 0;
-		Account user{ -1, username, password, region, queueId, voli::settings->DefaultTargetLevel, voli::settings->DefaultTargetBE, autoPlay };
+		Account user{ -1, username, password, region, queueId, targetLevel, targetBE, autoPlay };
 		auto insertedId = voli::database->insert(user);
 		user.id = insertedId;
 
@@ -126,17 +128,42 @@ int main()
 	});
 
 	voli::server->addHandler("RequestChangeSettings", [](json data) {
-		int id = data.at("id").get<int>();
-		return std::string("success");
-	});
-	
-	voli::server->addHandler("RequestChangeAutoPlay", [](json data) {
-		int id = data.at("id").get<int>();
-		bool autoPlay = data.at("autoPlay").get<bool>();
-		auto x = voli::manager->Get(id);
-		if (x) {
-			x->account.status = autoPlay;
+		try {
+			int id = data.at("id").get<int>();
+			int queueId = data.at("queue").get<int>();
+			bool autoplay = data.at("autoplay").get<bool>();
+			int targetLevel = data.at("targetlevel").get<int>();
+			int targetBE = data.at("targetbe").get<int>();
+
+
+			auto x = voli::manager->Get(id);
+			if (auto user = voli::database->get_no_throw<Account>(id)) {
+
+				user->maxbe = targetBE;
+				user->maxlvl = targetLevel;
+				user->status = autoplay;
+				user->queueId = queueId;
+
+				voli::database->update(user);
+				// Update Accounts vector;
+				for (auto& account : voli::accounts) {
+					if (account.id == user->id) {
+						account.maxbe = user->maxbe;
+						account.maxlvl = user->maxlvl;
+						account.status = user->status;
+						account.queueId = user->queueId;
+						break;
+					}
+				}
+			}
+			else {
+				return std::string("failed");
+			}
 		}
+		catch (...) {
+			return std::string("failed");
+		}
+
 		return std::string("success");
 	});
 
