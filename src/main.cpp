@@ -144,7 +144,7 @@ int main()
 				user->status = autoplay;
 				user->queueId = queueId;
 
-				voli::database->update(user);
+				voli::database->update(*user);
 				// Update Accounts vector;
 				for (auto& account : voli::accounts) {
 					if (account.id == user->id) {
