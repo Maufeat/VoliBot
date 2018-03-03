@@ -65,18 +65,18 @@ void InstanceManager::Start(voli::Account user) {
   std::string headless = (settings->Headless) ? "--headless" : "";
   auto x = launchWithArgs(settings->LeaguePath, headless + " --allow-multiple-clients --app-port=" + std::to_string(port) + " --remoting-auth-token=" + password);
   if (x != 0) {
-	  std::shared_ptr<voli::LeagueInstance> client = std::make_shared<voli::LeagueInstance>("127.0.0.1", port, password);
-	  client->id = user.id;
-	  client->account = user;
-	  Add(client);
-	  settings->CurSessions = settings->CurSessions + 1;
+    std::shared_ptr<voli::LeagueInstance> client = std::make_shared<voli::LeagueInstance>("127.0.0.1", port, password);
+    client->id = user.id;
+    client->account = user;
+    Add(client);
+    settings->CurSessions = settings->CurSessions + 1;
 #if defined(OS_WIN)
-	  std::string title = "VoliBot - Current Session: " + std::to_string(settings->CurSessions);
-	  SetConsoleTitle(title.c_str());
+    std::string title = "VoliBot - Current Session: " + std::to_string(settings->CurSessions);
+    SetConsoleTitle(title.c_str());
 #endif
   }
   else
-	  voli::printSystem("No League found. Please check your League of Legends Path in Settings.");
+    voli::printSystem("No League found. Please check your League of Legends Path in Settings.");
 };
 
 
@@ -90,14 +90,14 @@ void InstanceManager::Add(std::shared_ptr<voli::LeagueInstance> client) {
         std::cout << "Waiting for LeagueClient to be started." << std::endl;
         spt->wss.start();
       }
-	  else if(e.value() == 10009) {}
+      else if (e.value() == 10009) {}
       else
         std::cout << "Client: Error: " + std::to_string(e.value()) + " | error message: " + e.message() << std::endl;
     }
   };
   client->wss.on_message = [this, ptr](std::shared_ptr<lol::WssClient::Connection> connection,
-      std::shared_ptr<lol::WssClient::Message> message) {
-    if(auto spt = ptr.lock()) {
+    std::shared_ptr<lol::WssClient::Message> message) {
+    if (auto spt = ptr.lock()) {
       if (message->size() > 0) {
         auto j = json::parse(message->string()).get<std::vector<json>>();
         if (j[0].get<int32_t>() == 0) {
@@ -125,11 +125,11 @@ const std::unordered_map<uint32_t, std::shared_ptr<voli::LeagueInstance>>& Insta
   return mClients;
 };
 
-std::shared_ptr<voli::LeagueInstance> InstanceManager::Get(uint32_t id) const {
-  auto it = mClients.find(id);
+std::shared_ptr<voli::LeagueInstance> InstanceManager::Get(const uint32_t id) const {
+  const auto it = mClients.find(id);
   return it == mClients.end() ? nullptr : it->second;
 };
 
-void InstanceManager::remove(uint32_t id) {
+void InstanceManager::Remove(uint32_t id) {
   mClients.erase(id);
 }
